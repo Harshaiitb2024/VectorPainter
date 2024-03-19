@@ -1,0 +1,53 @@
+#-----------------#
+#  Global Config  #
+#-----------------#
+
+# common args
+target: ~
+prompt: ~
+neg_prompt: ~ # negative prompt
+
+# Accelerate config
+state:
+  cpu: False # use cpu
+  mprec: no # mixed precision, choices: 'no', 'fp16', 'bf16'
+
+# Diffusers config
+diffuser:
+  download: False # Set this variable to True the first time it runs
+  force_download: False
+  resume_download: False
+
+# PyDiffVG config
+diffvg:
+  print_timing: False
+
+# reproduction
+seed: 951222
+# multi-run
+multirun: False
+srange: ~ # seed range, example: [100, 100]
+
+# log
+result_path: './workspace'
+save_step: 50
+
+# visual rendering process
+mv: True # make video
+framefreq: 50 # save the image interval
+framerate: 24 # by adjusting the frame rate, you can control the playback speed of the output video
+
+# hydra setting
+hydra:
+  help:
+    # app name, override to match the name your app is known by
+    app_name: 'StrokeStyle'
+  run:
+    # output directory for normal runs
+    # warning: make sure that the L53-55 of './libs/model_state.py' and 'dir' are modified together
+    dir: ./${result_path}/StrokeStyle-${now:%Y-%m-%d-%H-%M-%S}
+
+# default settings
+defaults:
+  - _self_
+  - x: ~
