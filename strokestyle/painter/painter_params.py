@@ -10,6 +10,8 @@ import torch
 from scipy.spatial import ConvexHull
 from skimage.segmentation import mark_boundaries, slic
 from strokestyle.diffvg_warp import DiffVGState
+from strokestyle.token2attn.ptp_utils import view_images
+from tqdm import trange
 
 
 class Painter(DiffVGState):
@@ -60,20 +62,15 @@ class Painter(DiffVGState):
         style_img = self.style_img.squeeze(0).permute(1, 2, 0).cpu().numpy()
         # brush stroke init
         segments = self.segment_style(style_img, self.num_paths)
-        location, s, e, c, width, color = self.clusters_to_strokes(
+        s, e, c, width, color = self.clusters_to_strokes(
             segments,
             style_img,
             self.canvas_height,
             self.canvas_width,
-            sec_scale=1.1,
-            width_scale=0.1
         )
-        s += location
-        c += location
-        e += location
 
         self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) + (self.control_points_per_seg - 2)
-        for i in range(location.shape[0]):
+        for i in range(s.shape[0]):
             points = []
             points.append((s[i][0], s[i][1]))
             points.append((c[i][0], c[i][1]))
@@ -82,7 +79,7 @@ class Painter(DiffVGState):
             points = torch.tensor(points).to(self.device)
             path = pydiffvg.Path(num_control_points=torch.tensor(self.num_control_points),
                                  points=points,
-                                 stroke_width=torch.tensor(width[i][0]),
+                                 stroke_width=torch.tensor(width[i]),
                                  is_closed=False)
             self.shapes.append(path)
             self.strokes_counter += 1
@@ -110,33 +107,31 @@ class Painter(DiffVGState):
         segments = slic(
             style_img,
             n_segments=num_paths,
-            min_size_factor=0.02,
-            max_size_factor=4.,
             compactness=2,
             sigma=1,
             start_label=0
         )
-        mark_boundaries(style_img, segments) * 255
+        segmented_image = mark_boundaries(style_img, segments) * 255
+        view_images(segmented_image, save_image=True, fp=self.style_dir / 'segmented.png')
+
         return segments
 
-    def clusters_to_strokes(self, segments, img, H, W, sec_scale=0.001, width_scale=1):
+    def clusters_to_strokes(self, segments, img, H, W):
         segments += np.abs(np.min(segments))
         num_clusters = np.max(segments)
         clusters_params = {
-            'center': [],
             's': [],
             'e': [],
-            'bp1': [],
-            'bp2': [],
-            'num_pixels': [],
-            'stddev': [],
             'width': [],
             'color_rgb': []
         }
 
-        for cluster_idx in range(num_clusters + 1):
+        print('start extracting stroke parameters...')
+
+        for cluster_idx in trange(num_clusters + 1):
             cluster_mask = segments == cluster_idx
-            if np.sum(cluster_mask) < 5: continue
+            if np.sum(cluster_mask) < 5:
+                continue
             cluster_mask_nonzeros = np.nonzero(cluster_mask)
 
             cluster_points = np.stack((cluster_mask_nonzeros[0], cluster_mask_nonzeros[1]), axis=-1)
@@ -151,87 +146,44 @@ class Painter(DiffVGState):
             max_idx_a, max_idx_b = np.nonzero(dist == np.max(dist))
             point_a = border_points[max_idx_a[0]]
             point_b = border_points[max_idx_b[0]]
-            # compute the two intersection points of the line that goes orthogonal to point_a and point_b
-            v_ba = point_b - point_a
-            v_orth = np.array([v_ba[1], -v_ba[0]])
-            m = (point_a + point_b) / 2.0
-            n = m + 0.5 * v_orth
-            p = cluster_points[convex_hull.simplices][:, 0]
-            q = cluster_points[convex_hull.simplices][:, 1]
-            u = - ((m[..., 0] - n[..., 0]) * (m[..., 1] - p[..., 1]) - (m[..., 1] - n[..., 1]) * (
-                    m[..., 0] - p[..., 0])) \
-                / ((m[..., 0] - n[..., 0]) * (p[..., 1] - q[..., 1]) - (m[..., 1] - n[..., 1]) * (
-                    p[..., 0] - q[..., 0]))
-            intersec_idcs = np.logical_and(u >= 0, u <= 1)
-            intersec_points = p + u.reshape(-1, 1) * (q - p)
-            intersec_points = intersec_points[intersec_idcs]
+            v_ab = point_b - point_a
 
-            width = np.sum((intersec_points[0] - intersec_points[1]) ** 2)
+            distances = np.zeros(len(border_points))
+            for i, point in enumerate(border_points):
+                v_ap = point - point_a
+                distance = np.abs(np.cross(v_ab, v_ap)) / np.linalg.norm(v_ab)
+                distances[i] = distance
+            average_width = np.mean(distances)
 
-            if width == 0.0: continue
+            if average_width == 0.0:
+                continue
 
             clusters_params['s'].append(point_a / img.shape[:2])
             clusters_params['e'].append(point_b / img.shape[:2])
-            clusters_params['bp1'].append(intersec_points[0] / img.shape[:2])
-            clusters_params['bp2'].append(intersec_points[1] / img.shape[:2])
-            clusters_params['width'].append(np.sum((intersec_points[0] - intersec_points[1]) ** 2))
+            clusters_params['width'].append(average_width)
 
             clusters_params['color_rgb'].append(np.mean(img[cluster_mask], axis=0))
-            center_x = np.mean(cluster_mask_nonzeros[0]) / img.shape[0]
-            center_y = np.mean(cluster_mask_nonzeros[1]) / img.shape[1]
-            clusters_params['center'].append(np.array([center_x, center_y]))
-            clusters_params['num_pixels'].append(np.sum(cluster_mask))
-            clusters_params['stddev'].append(np.mean(np.std(img[cluster_mask], axis=0)))
 
         for key in clusters_params.keys():
             clusters_params[key] = np.array(clusters_params[key])
 
-        N = clusters_params['center'].shape[0]
-
-        stddev = clusters_params['stddev']
-        rel_num_pixels = 5 * clusters_params['num_pixels'] / np.sqrt(H * W)
-
-        location = clusters_params['center']
-        num_pixels_per_cluster = clusters_params['num_pixels'].reshape(-1, 1)
         s = clusters_params['s']
         e = clusters_params['e']
-        cluster_width = clusters_params['width']
+        width = clusters_params['width']
+        color = clusters_params['color_rgb']
 
-        location[..., 0] *= H
-        location[..., 1] *= W
         s[..., 0] *= H
         s[..., 1] *= W
         e[..., 0] *= H
         e[..., 1] *= W
+        c = (s + e) / 2.
 
-        s -= location
-        e -= location
-
-        color = clusters_params['color_rgb']
-
-        c = (s + e) / 2. + np.stack([np.random.uniform(low=-1, high=1, size=[N]),
-                                     np.random.uniform(low=-1, high=1, size=[N])],
-                                    axis=-1)
-
-        sec_center = (s + e + c) / 3.
-        s -= sec_center
-        e -= sec_center
-        c -= sec_center
-
-        rel_num_pix_quant = np.quantile(rel_num_pixels, q=[0.3, 0.99])
-        width_quant = np.quantile(cluster_width, q=[0.3, 0.99])
-        rel_num_pixels = np.clip(rel_num_pixels, rel_num_pix_quant[0], rel_num_pix_quant[1])
-        cluster_width = np.clip(cluster_width, width_quant[0], width_quant[1])
-        width = width_scale * rel_num_pixels.reshape(-1, 1) * cluster_width.reshape(-1, 1)
-        s, e, c = [x * sec_scale for x in [s, e, c]]
-
-        location, s, e, c, width, color = [x.astype(np.float32) for x in [location, s, e, c, width, color]]
-        location = location[..., ::-1]
+        s, e, c, width, color = [x.astype(np.float32) for x in [s, e, c, width, color]]
         s = s[..., ::-1]
         e = e[..., ::-1]
         c = c[..., ::-1]
 
-        return location, s, e, c, width, color
+        return s, e, c, width, color
 
     def get_image(self):
         img = self.render_warp()

@@ -95,7 +95,7 @@ class StrokeStylePipeline(ModelState):
         # or from image file
         # content_img = Image.open(style_fpath).convert("RGB")
         # process_comp = transforms.Compose([
-        #     transforms.Resize(size=(self.args.image_size, self.args.image_size))
+        #     transforms.Resize(size=(self.x_cfg.image_size, self.x_cfg.image_size))
         # ])
         # content_img = process_comp(content_img)
 
@@ -275,8 +275,8 @@ class StrokeStylePipeline(ModelState):
         )
         target_file = self.result_path / 'sample.png'
         view_images([np.array(img) for img in outputs.images], save_image=True, fp=target_file)
-
-        return target_file.as_posix()
+        target = Image.open(target_file)
+        return target
 
     def load_and_process_style_file(self, style_fpath):
         style_path = Path(style_fpath)
@@ -302,13 +302,9 @@ class StrokeStylePipeline(ModelState):
         return style_file
 
     def get_target(self,
-                   target_file,
+                   target,
                    image_size,
                    fix_scale):
-        if not is_image_file(target_file):
-            raise TypeError(f"{target_file} is not image file.")
-
-        target = Image.open(target_file)
 
         if target.mode == "RGBA":
             # Create a white rgba background
