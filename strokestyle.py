@@ -31,11 +31,23 @@ def main(cfg: omegaconf.DictConfig):
     # render function
     render_batch_fn = partial(render_batch_wrap, cfg=cfg, seed_range=seed_range)
 
-    if not cfg.multirun:  # generate SVG multiple times
-        pipe = StrokeStylePipeline(cfg)
-        pipe.painterly_rendering(cfg.prompt, cfg.target)
-    else:  # generate many SVG at once
-        render_batch_fn(pipeline=StrokeStylePipeline, text_prompt=cfg.prompt, style_fpath=cfg.target)
+    # read each line of prompts.txt file, use as prompt
+    if cfg.prompt is None:
+        with open("prompts.txt", 'r') as f:
+            cfg.prompt = f.readlines()
+            # shuffle
+            import random
+            random.shuffle(cfg.prompt)
+    else:
+        cfg.prompt = [cfg.prompt]
+
+    for prompt in cfg.prompt:
+        cfg.prompt = prompt.strip()
+        if not cfg.multirun:  # generate SVG multiple times
+            pipe = StrokeStylePipeline(cfg)
+            pipe.painterly_rendering(cfg.prompt, cfg.target)
+        else:  # generate many SVG at once
+            render_batch_fn(pipeline=StrokeStylePipeline, text_prompt=cfg.prompt, style_fpath=cfg.target)
 
 
 if __name__ == '__main__':
