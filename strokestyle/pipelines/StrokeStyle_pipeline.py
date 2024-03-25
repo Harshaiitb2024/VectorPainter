@@ -193,9 +193,10 @@ class StrokeStylePipeline(ModelState):
 
                 # perceptual loss with style image
                 l_percep_style = torch.tensor(0.)
-                if self.x_cfg.perceptual.style_coeff > 0 and perceptual_loss_fn is not None:
-                    l_perceptual = perceptual_loss_fn(style_img, raster_sketch).mean()
-                    l_percep_style = l_perceptual * self.x_cfg.perceptual.style_coeff
+                if self.step > self.x_cfg.perceptual.style_warmup:
+                    if self.x_cfg.perceptual.style_coeff > 0 and perceptual_loss_fn is not None:
+                        l_perceptual = perceptual_loss_fn(style_img, raster_sketch).mean()
+                        l_percep_style = l_perceptual * self.x_cfg.perceptual.style_coeff
 
                 # prep with inputs
                 l_percep_content = torch.tensor(0.)

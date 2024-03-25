@@ -2,7 +2,7 @@ method: "StrokeStyle"
 
 image_size: 512
 path_svg: ~
-fix_scale: False  # if the target image is not squared, it is recommended to fix the scale
+fix_scale: False # if the target image is not squared, it is recommended to fix the scale
 
 # train
 num_iter: 2000
@@ -10,7 +10,7 @@ batch_size: 1
 num_stages: 1 # training stages, you can train x strokes, then freeze them and train another x strokes etc
 lr_scheduler: False
 lr_decay_rate: 0.1
-decay_steps: [ 1000, 1500 ]
+decay_steps: [1000, 1500]
 lr: 1
 color_lr: 0.2
 color_vars_threshold: 0.0 # uncomment the code
@@ -24,10 +24,9 @@ pos_loss_weight: 1.0
 num_paths: 5000 # number of strokes
 width: 1.5 # stroke width
 control_points_per_seg: 3 # Number of points to sample per parametrized curve.
-brushes_per_pixel: 20 # Number of brush strokes to be drawn per pixel.
 num_segments: 1
 optim_opacity: False # if True, the stroke opacity is optimized
-optim_width: True  # if True, the stroke width is optimized
+optim_width: True # if True, the stroke width is optimized
 optim_rgba: True # if True, the stroke RGBA is optimized
 
 # diffusion
@@ -40,26 +39,27 @@ num_inference_steps: 100
 guidance_scale: 7.5 # sdxl default 5.0
 
 clip:
-  model_name: "RN101"  # RN101, ViT-L/14
+  model_name: "RN101" # RN101, ViT-L/14
   feats_loss_type: "l2" # clip visual loss type, conv layers
-  feats_loss_weights: [ 0,0,1.0,1.0,0 ] # RN based
+  feats_loss_weights: [0, 0, 1.0, 1.0, 0] # RN based
   #  feats_loss_weights: [ 0,0,1.0,1.0,0,0,0,0,0,0,0,0 ] # ViT based
   fc_loss_weight: 0.1 # clip visual loss, fc layer weight
   augmentations: "affine_norm" # augmentation before clip visual computation, affine_norm_trivial
   num_aug: 4 # num of augmentation before clip visual computation
-  vis_loss: 0.5 # 1 or 0 for use or disable clip visual loss
+  vis_loss: 1 # 1 or 0 for use or disable clip visual loss
   text_visual_coeff: 0 # cosine similarity between text and img
 
 sds:
   crop_size: 512
   augmentations: "affine"
   guidance_scale: 100
-  grad_scale: 0
-  t_range: [ 0.05, 0.95 ]
-  warmup: 1000
+  grad_scale: 1.5e-6
+  t_range: [0.05, 0.95]
+  warmup: 1200
 
 perceptual:
   name: "lpips"
-  lpips_net: 'vgg'
+  lpips_net: "vgg"
   content_coeff: 0
-  style_coeff: 0.2
+  style_coeff: 0.5
+  style_warmup: 600
