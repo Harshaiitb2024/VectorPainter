@@ -32,7 +32,7 @@ class StrokeStylePipeline(ModelState):
         super().__init__(args, log_path_suffix=logdir_)
 
         self.result_path.mkdir(parents=True, exist_ok=True)
-        print(f"results path: {self.result_path}")
+        self.print(f"results path: {self.result_path}")
 
         # create log dir
         self.style_dir = self.result_path / "style_image"
@@ -87,6 +87,7 @@ class StrokeStylePipeline(ModelState):
         )
 
     def painterly_rendering(self, text_prompt, style_fpath):
+        self.print(f"start painterly rendering with text prompt: {text_prompt}")
         # generate content image using diffusion model
         content_img = self.diffusion_sampling(text_prompt)
 
@@ -101,6 +102,7 @@ class StrokeStylePipeline(ModelState):
 
         # process style file
         style_img = self.load_and_process_style_file(style_fpath)
+        plot_img(style_img, self.style_dir, fname="style_image_preprocess")
 
         perceptual_loss_fn = None
         if self.x_cfg.perceptual.content_coeff > 0 or self.x_cfg.perceptual.style_coeff > 0:
@@ -119,8 +121,8 @@ class StrokeStylePipeline(ModelState):
         renderer = self.load_render(inputs, style_img)
         img = renderer.init_image()
         self.print("init_image shape: ", img.shape)
-        plot_img(img, self.result_path, fname="init_style")
-        renderer.save_svg(self.result_path.as_posix(), "init_style")
+        plot_img(img, self.style_dir, fname="init_style")
+        renderer.save_svg(self.style_dir.as_posix(), "init_style")
 
         # load optimizer
         optimizer = SketchPainterOptimizer(renderer,
@@ -273,7 +275,7 @@ class StrokeStylePipeline(ModelState):
             guidance_scale=self.x_cfg.guidance_scale,
             generator=self.g_device
         )
-        target_file = self.result_path / 'sample.png'
+        target_file = self.sd_sample_dir / 'sample.png'
         view_images([np.array(img) for img in outputs.images], save_image=True, fp=target_file)
         target = Image.open(target_file)
         return target
