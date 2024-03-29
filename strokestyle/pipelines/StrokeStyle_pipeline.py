@@ -39,12 +39,26 @@ class StrokeStylePipeline(ModelState):
         self.sd_sample_dir = self.result_path / "sd_sample"
         self.png_logs_dir = self.result_path / "png_logs"
         self.svg_logs_dir = self.result_path / "svg_logs"
+        self.log_dir = self.result_path / "configs"
+
+        # use dir name to save logs
+        self.clip_vis_loss_dir = self.log_dir / f"clip_vis_loss_({args.x.clip.vis_loss})"
+        self.sds_grad_scale_dir = self.log_dir / f"sds_grad_scale_({args.x.sds.grad_scale})"
+        self.style_coeff_dir = self.log_dir / f"style_coeff_({args.x.perceptual.style_coeff})"
+        self.pos_loss_weight_dir = self.log_dir / f"pos_loss_weight_({args.x.pos_loss_weight})"
+        self.prompt_dir = self.log_dir / f"prompt_{args.prompt}"
 
         if self.accelerator.is_main_process:
             self.style_dir.mkdir(parents=True, exist_ok=True)
             self.sd_sample_dir.mkdir(parents=True, exist_ok=True)
             self.png_logs_dir.mkdir(parents=True, exist_ok=True)
             self.svg_logs_dir.mkdir(parents=True, exist_ok=True)
+
+            self.clip_vis_loss_dir.mkdir(parents=True, exist_ok=True)
+            self.sds_grad_scale_dir.mkdir(parents=True, exist_ok=True)
+            self.style_coeff_dir.mkdir(parents=True, exist_ok=True)
+            self.pos_loss_weight_dir.mkdir(parents=True, exist_ok=True)
+            self.prompt_dir.mkdir(parents=True, exist_ok=True)
 
         self.make_video = self.args.mv
         if self.make_video:
