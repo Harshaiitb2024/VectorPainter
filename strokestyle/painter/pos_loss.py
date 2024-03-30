@@ -4,19 +4,10 @@ import torch
 def get_relative_pos(point_vars):
     loss = []
     for points in point_vars:
-        dist_vec = []
-        for i in range(len(points) - 1):
-            dist_vec.append(points[i + 1] - points[i])
-
-        dist = torch.norm(torch.stack(dist_vec), dim=1)
-
-        angle_cos = []
-        for i in range(len(dist_vec) - 1):
-            cos_val = torch.dot(dist_vec[i], dist_vec[i + 1]) / (dist[i] * dist[i + 1])
-            angle_cos.append(cos_val)
-
-        angle_cos = torch.stack(angle_cos)
-        tmp = torch.concatenate([dist, angle_cos])
+        dist_vec = points[1:] - points[:-1]  # 计算相邻点之间的向量差
+        dist = torch.norm(dist_vec, dim=1)  # 计算向量差的模长
+        cos_val = torch.sum(dist_vec[:-1] * dist_vec[1:], dim=1) / (dist[:-1] * dist[1:])  # 计算相邻向量之间的夹角余弦值
+        tmp = torch.cat([dist, cos_val])
         loss.append(tmp)
     return torch.stack(loss)
 
