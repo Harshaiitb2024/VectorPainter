@@ -49,7 +49,14 @@ class DiffVGState(torch.nn.Module):
         self.width_vars = []
 
     def clip_curve_shape(self, *args, **kwargs):
-        raise NotImplementedError
+        # raise NotImplementedError
+        for path in self.shapes:
+            path.points.data *= 4
+            path.stroke_width.data.clamp_(1.0, 50)
+            path.stroke_width.data *= 4
+        for group in self.shape_groups:
+            group.stroke_color.data.clamp_(0.0, 1.0)
+            group.stroke_color.data[-1].clamp_(1.0, 1.0)  # force full opacity
 
     def render_warp(self, seed=0):
         self.clip_curve_shape()

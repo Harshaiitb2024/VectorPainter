@@ -133,7 +133,7 @@ class StrokeStylePipeline(ModelState):
 
         # load renderer
         renderer = self.load_render(inputs, style_img)
-        img = renderer.init_image()
+        img = renderer.init_image(random=self.x_cfg.random_init)
         self.print("init_image shape: ", img.shape)
         plot_img(img, self.style_dir, fname="init_style")
         renderer.save_svg(self.style_dir.as_posix(), "init_style")

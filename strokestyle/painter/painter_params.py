@@ -5,7 +5,9 @@
 
 import numpy as np
 import omegaconf
+import pathlib
 import pydiffvg
+import random
 import torch
 from scipy.spatial import ConvexHull
 from skimage.segmentation import mark_boundaries, slic
@@ -57,42 +59,62 @@ class Painter(DiffVGState):
 
         self.strokes_counter = 0  # counts the number of calls to "get_path"
 
-    def init_image(self, stage=0):
-        # style_img (1, 3, M, N) -> (M, N, 3)
-        style_img = self.style_img.squeeze(0).permute(1, 2, 0).cpu().numpy()
-        # brush stroke init
-        segments = self.segment_style(style_img, self.num_paths)
-        s, e, c, width, color = self.clusters_to_strokes(
-            segments,
-            style_img,
-            self.canvas_height,
-            self.canvas_width,
-        )
+    def init_image(self, random=False):
+        if not random:
+            # style_img (1, 3, M, N) -> (M, N, 3)
+            style_img = self.style_img.squeeze(0).permute(1, 2, 0).cpu().numpy()
+            # brush stroke init
+            segments = self.segment_style(style_img, self.num_paths)
+            s, e, c, width, color = self.clusters_to_strokes(
+                segments,
+                style_img,
+                self.canvas_height,
+                self.canvas_width,
+            )
 
-        self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) + (self.control_points_per_seg - 2)
-        for i in range(s.shape[0]):
-            points = []
-            points.append((s[i][0], s[i][1]))
-            points.append((c[i][0], c[i][1]))
-            points.append((e[i][0], e[i][1]))
+            self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) + (self.control_points_per_seg - 2)
+            for i in range(s.shape[0]):
+                points = []
+                points.append((s[i][0], s[i][1]))
+                points.append((c[i][0], c[i][1]))
+                points.append((e[i][0], e[i][1]))
 
-            points = torch.tensor(points).to(self.device)
-            path = pydiffvg.Path(num_control_points=torch.tensor(self.num_control_points),
-                                 points=points,
-                                 stroke_width=torch.tensor(width[i]),
-                                 is_closed=False)
-            self.shapes.append(path)
-            self.strokes_counter += 1
+                points = torch.tensor(points).to(self.device)
+                path = pydiffvg.Path(num_control_points=torch.tensor(self.num_control_points),
+                                    points=points,
+                                    stroke_width=torch.tensor(width[i]),
+                                    is_closed=False)
+                self.shapes.append(path)
+                self.strokes_counter += 1
 
-            stroke_color = torch.tensor([color[i][0], color[i][1], color[i][2], 1.0])
-            path_group = pydiffvg.ShapeGroup(shape_ids=torch.tensor([len(self.shapes) - 1]),
-                                             fill_color=None,
-                                             stroke_color=stroke_color)
-            self.shape_groups.append(path_group)
-        self.optimize_flag = [True for _ in range(len(self.shapes))]
+                stroke_color = torch.tensor([color[i][0], color[i][1], color[i][2], 1.0])
+                path_group = pydiffvg.ShapeGroup(shape_ids=torch.tensor([len(self.shapes) - 1]),
+                                                fill_color=None,
+                                                stroke_color=stroke_color)
+                self.shape_groups.append(path_group)
+            self.optimize_flag = [True for _ in range(len(self.shapes))]
 
-        for path in self.shapes:
-            path.stroke_width.data.clamp_(1.0, self.max_width)
+            for path in self.shapes:
+                path.stroke_width.data.clamp_(1.0, self.max_width)
+
+        else:
+            num_paths_exists = 0
+            if self.path_svg is not None and pathlib.Path(self.path_svg).exists():
+                print(f"-> init svg from `{self.path_svg}` ...")
+
+                self.canvas_width, self.canvas_height, self.shapes, self.shape_groups = self.load_svg(self.path_svg)
+                # if you want to add more strokes to existing ones and optimize on all of them
+                num_paths_exists = len(self.shapes)
+
+            for i in range(num_paths_exists, self.num_paths):
+                stroke_color = torch.tensor([0.0, 0.0, 0.0, 1.0])
+                path = self.get_path()
+                self.shapes.append(path)
+                path_group = pydiffvg.ShapeGroup(shape_ids=torch.tensor([len(self.shapes) - 1]),
+                                                 fill_color=None,
+                                                 stroke_color=stroke_color)
+                self.shape_groups.append(path_group)
+            self.optimize_flag = [True for i in range(len(self.shapes))]
 
         img = self.render_warp()
         img = img[:, :, 3:4] * img[:, :, :3] + \
@@ -184,6 +206,29 @@ class Painter(DiffVGState):
         c = c[..., ::-1]
 
         return s, e, c, width, color
+
+    def get_path(self):
+        self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) + (self.control_points_per_seg - 2)
+        points = []
+        p0 = (random.random(), random.random())
+        points.append(p0)
+
+        for j in range(self.num_segments):
+            radius = 0.05
+            for k in range(self.control_points_per_seg - 1):
+                p1 = (p0[0] + radius * (random.random() - 0.5), p0[1] + radius * (random.random() - 0.5))
+                points.append(p1)
+                p0 = p1
+        points = torch.tensor(points).to(self.device)
+        points[:, 0] *= self.canvas_width
+        points[:, 1] *= self.canvas_height
+
+        path = pydiffvg.Path(num_control_points=self.num_control_points,
+                             points=points,
+                             stroke_width=torch.tensor(self.width),
+                             is_closed=False)
+        self.strokes_counter += 1
+        return path
 
     def get_image(self):
         img = self.render_warp()
