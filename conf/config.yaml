@@ -3,6 +3,7 @@
 #-----------------#
 
 # common args
+content: ~
 target: ~
 prompt: ~
 neg_prompt: ~ # negative prompt

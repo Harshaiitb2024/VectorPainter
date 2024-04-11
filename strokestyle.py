@@ -14,7 +14,11 @@ import omegaconf
 sys.path.append(os.path.split(os.path.abspath(os.path.dirname(__file__)))[0])
 
 from strokestyle.utils import render_batch_wrap, get_seed_range
-from strokestyle.pipelines.StrokeStyle_pipeline import StrokeStylePipeline
+
+METHODS = [
+    'StrokeStyle',
+    'StylizedStrokeStyle'
+]
 
 
 @hydra.main(version_base=None, config_path="conf", config_name='config')
@@ -23,6 +27,8 @@ def main(cfg: omegaconf.DictConfig):
     The project configuration is stored in './conf/config.yaml'
     And style configurations are stored in './conf/x/stroke.yaml'
     """
+    flag = cfg.x.method
+    assert flag in METHODS, f"{flag} is not currently supported!"
 
     # set seed
     set_seed(cfg.seed)
@@ -30,25 +36,32 @@ def main(cfg: omegaconf.DictConfig):
 
     # render function
     render_batch_fn = partial(render_batch_wrap, cfg=cfg, seed_range=seed_range)
+    if flag == "StrokeStyle":
+        # read each line of prompts.txt file, use as prompt
+        if cfg.prompt is None:
+            with open("prompts.txt", 'r') as f:
+                cfg.prompt = f.readlines()
+                # shuffle
+                # import random
+                # random.shuffle(cfg.prompt)
+        else:
+            cfg.prompt = [cfg.prompt]
 
-    # read each line of prompts.txt file, use as prompt
-    if cfg.prompt is None:
-        with open("prompts.txt", 'r') as f:
-            cfg.prompt = f.readlines()
-            # shuffle
-            import random
-            random.shuffle(cfg.prompt)
-    else:
-        cfg.prompt = [cfg.prompt]
-
-    for prompt in cfg.prompt:
-        cfg.prompt = prompt.strip()
-        if not cfg.multirun:  # generate SVG multiple times
-            pipe = StrokeStylePipeline(cfg)
-            pipe.painterly_rendering(cfg.prompt, cfg.target)
-        else:  # generate many SVG at once
-            render_batch_fn(pipeline=StrokeStylePipeline, text_prompt=cfg.prompt, style_fpath=cfg.target)
-
+        from strokestyle.pipelines.StrokeStyle_pipeline import StrokeStylePipeline
+        for prompt in cfg.prompt:
+            cfg.prompt = prompt.strip()
+            if not cfg.multirun:  # generate SVG multiple times
+                pipe = StrokeStylePipeline(cfg)
+                pipe.painterly_rendering(cfg.prompt, cfg.target)
+            else:  # generate many SVG at once
+                render_batch_fn(pipeline=StrokeStylePipeline, text_prompt=cfg.prompt, content_fpath=cfg.content, style_fpath=cfg.target)
+    elif flag == "StylizedStrokeStyle":
+        from strokestyle.pipelines.StylizedStrokeStyle_pipeline import StylizedStrokeStylePipeline
+        if not cfg.multirun:
+            pipe = StylizedStrokeStylePipeline(cfg)
+            pipe.painterly_rendering(cfg.content, cfg.target)
+        else:
+            render_batch_fn(pipeline=StylizedStrokeStylePipeline, content_fpath=cfg.content, style_fpath=cfg.target)
 
 if __name__ == '__main__':
     main()
