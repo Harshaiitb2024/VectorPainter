@@ -53,5 +53,5 @@ clip:
 perceptual:
   name: "lpips"
   lpips_net: "vgg"
-  content_coeff: 1
+  content_coeff: 0.5
   style_coeff: 1

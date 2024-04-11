@@ -45,8 +45,8 @@ hydra:
     app_name: 'StrokeStyle'
   run:
     # output directory for normal runs
-    # warning: make sure that the L53-55 of './libs/model_state.py' and 'dir' are modified together
-    dir: ./${result_path}/${x.method}-${now:%Y-%m-%d-%H-%M-%S}
+    # warning: make sure that the L53-55 of './libs/utils/model_state.py' and 'dir' are modified together
+    dir: ./${result_path}/${x.method}-${now:%Y-%m-%d-%H-%M}
 
 # default settings
 defaults:

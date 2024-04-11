@@ -48,7 +48,7 @@ class ModelState:
         """create working space"""
         # rule: ['./config'. 'method_name', 'exp_name.yaml']
         # -> result_path: ./runs/{method_name}-{exp_name}, as a base folder
-        now_time = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        now_time = datetime.now().strftime('%Y-%m-%d-%H-%M')
         results_folder = self.args.get("result_path", None)
         if results_folder is None:
             self.result_path = Path("./workdir") / f"{self.x_cfg.method}-{now_time}"
