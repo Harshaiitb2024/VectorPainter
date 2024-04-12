@@ -20,7 +20,6 @@ from strokestyle.painter.sketch_utils import fix_image_scale
 from strokestyle.token2attn.ptp_utils import view_images
 from strokestyle.utils.plot import plot_couple, plot_img
 from torchvision import transforms
-from torchvision.datasets.folder import is_image_file
 from tqdm.auto import tqdm
 
 
@@ -28,7 +27,7 @@ class StrokeStylePipeline(ModelState):
     def __init__(self, args):
         logdir_ = f"seed{args.seed}-im{args.x.image_size}" \
                   f"-{args.x.model_id}" \
-                  f"-{time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))}"
+                  f"-{time.strftime('%Y-%m-%d-%H-%M', time.localtime(time.time()))}"
         super().__init__(args, log_path_suffix=logdir_)
 
         self.result_path.mkdir(parents=True, exist_ok=True)
