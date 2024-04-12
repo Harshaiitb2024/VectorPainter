@@ -24,7 +24,7 @@ from torchvision.datasets.folder import is_image_file
 from tqdm.auto import tqdm
 
 
-class StylizedStrokeStylePipeline(ModelState):
+class StrokeStyleTransferPipeline(ModelState):
     def __init__(self, args):
         logdir_ = f"seed{args.seed}-im{args.x.image_size}" \
                   f"-{args.x.model_id}" \

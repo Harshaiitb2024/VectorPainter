@@ -17,7 +17,7 @@ from strokestyle.utils import render_batch_wrap, get_seed_range
 
 METHODS = [
     'StrokeStyle',
-    'StylizedStrokeStyle'
+    'StrokeStyleTransfer'
 ]
 
 
@@ -56,12 +56,12 @@ def main(cfg: omegaconf.DictConfig):
             else:  # generate many SVG at once
                 render_batch_fn(pipeline=StrokeStylePipeline, text_prompt=cfg.prompt, content_fpath=cfg.content, style_fpath=cfg.target)
     elif flag == "StylizedStrokeStyle":
-        from strokestyle.pipelines.StylizedStrokeStyle_pipeline import StylizedStrokeStylePipeline
+        from StrokeStyle.strokestyle.pipelines.StrokeStyleTransfer_pipeline import StrokeStyleTransferPipeline
         if not cfg.multirun:
-            pipe = StylizedStrokeStylePipeline(cfg)
+            pipe = StrokeStyleTransferPipeline(cfg)
             pipe.painterly_rendering(cfg.content, cfg.target)
         else:
-            render_batch_fn(pipeline=StylizedStrokeStylePipeline, content_fpath=cfg.content, style_fpath=cfg.target)
+            render_batch_fn(pipeline=StrokeStyleTransferPipeline, content_fpath=cfg.content, style_fpath=cfg.target)
 
 if __name__ == '__main__':
     main()

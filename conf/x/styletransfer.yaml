@@ -1,4 +1,4 @@
-method: "StylizedStrokeStyle"
+method: "StrokeStyleTransfer"
 
 image_size: 512
 path_svg: ~
