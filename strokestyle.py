@@ -57,7 +57,7 @@ def main(cfg: omegaconf.DictConfig):
             else:  # generate many SVG at once
                 render_batch_fn(pipeline=StrokeStylePipeline, text_prompt=cfg.prompt, style_fpath=cfg.target)
 
-    elif flag == "StylizedStrokeStyle":
+    elif flag == "StrokeStyleTransfer":
         from StrokeStyle.strokestyle.pipelines.StrokeStyleTransfer_pipeline import StrokeStyleTransferPipeline
         if not cfg.multirun:
             pipe = StrokeStyleTransferPipeline(cfg)
