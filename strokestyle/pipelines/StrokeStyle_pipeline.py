@@ -1,8 +1,8 @@
+import copy
 import shutil
 import time
 from functools import partial
 from pathlib import Path
-from typing import AnyStr
 
 import diffusers
 import numpy as np
@@ -14,8 +14,8 @@ from strokestyle.diffusers_warp import init_StableDiffusion_pipeline, model2res
 from strokestyle.libs.engine import ModelState
 from strokestyle.libs.metric.clip_score import CLIPScoreWrapper
 from strokestyle.libs.metric.lpips_origin import LPIPS
-from strokestyle.painter import (LSDSPipeline, LSDSSDXLPipeline, Painter,
-                                 SketchPainterOptimizer, get_relative_pos)
+from strokestyle.painter import (LSDSPipeline, LSDSSDXLPipeline, Painter, SketchPainterOptimizer, get_relative_pos,
+                                 bezier_curve_loss)
 from strokestyle.painter.sketch_utils import fix_image_scale
 from strokestyle.token2attn.ptp_utils import view_images
 from strokestyle.utils.plot import plot_couple, plot_img
@@ -149,6 +149,7 @@ class StrokeStylePipeline(ModelState):
 
         # log params
         init_relative_pos = get_relative_pos(renderer.get_points_params()).detach()  # init stroke position as GT
+        init_curves = copy.deepcopy(renderer.get_points_params())
 
         self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
         self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
@@ -220,9 +221,13 @@ class StrokeStylePipeline(ModelState):
                 # control points relative position loss
                 l_rel_pos = torch.tensor(0.)
                 if self.x_cfg.pos_loss_weight > 0:
-                    l_rel_pos = F.mse_loss(
-                        get_relative_pos(renderer.get_points_params()), init_relative_pos
-                    ).mean() * self.x_cfg.pos_loss_weight
+                    if self.x_cfg.pos_type == 'pos':
+                        l_rel_pos = F.mse_loss(
+                            get_relative_pos(renderer.get_points_params()), init_relative_pos
+                        ).mean() * self.x_cfg.pos_loss_weight
+                    elif self.x_cfg.pos_type == 'bez':
+                        l_rel_pos = bezier_curve_loss(renderer.get_points_params(), init_curves) \
+                                    * self.x_cfg.pos_loss_weight
 
                 # total loss
                 loss = sds_loss + total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
@@ -239,6 +244,7 @@ class StrokeStylePipeline(ModelState):
                 # records
                 pbar.set_description(
                     f"lr: {optimizer.get_lr():.2f}, "
+                    f"l_pos: {l_rel_pos.item():.5f}, "
                     f"l_total: {loss.item():.4f}"
                 )
 

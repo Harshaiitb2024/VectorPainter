@@ -12,7 +12,9 @@ python strokestyle.py x=stroke prompt='a photo of Sydney opera house. van Gogh s
 ### Sunflowers
 
 ```shell
-python strokestyle.py x=stroke "prompt='A bouquet of roses in a vase. van Gogh style.'" target="./assets/sunflowers.jpg" result_path='./workdir/Sunflowers/roses_sunflowers' seed=100
+CUDA_VISIBLE_DEVICES=1 python strokestyle.py x=stroke "prompt='A bouquet of roses in a vase. van Gogh style.'" target="./assets/sunflowers.jpg" x.pos_type='pos' x.pos_loss_weight=1.0 result_path='./workdir/roses_sunflowers_pos1.0' seed=100
+CUDA_VISIBLE_DEVICES=1 python strokestyle.py x=stroke "prompt='A bouquet of roses in a vase. van Gogh style.'" target="./assets/sunflowers.jpg" x.pos_type='bez' x.pos_loss_weight=1.0 result_path='./workdir/roses_sunflowers_bez1.0' seed=100
+CUDA_VISIBLE_DEVICES=1 python strokestyle.py x=stroke "prompt='A bouquet of roses in a vase. van Gogh style.'" target="./assets/sunflowers.jpg" x.pos_type='bez' x.pos_loss_weight=0.5 result_path='./workdir/roses_sunflowers_bez0.5' seed=100
 ```
 
 ### Field
