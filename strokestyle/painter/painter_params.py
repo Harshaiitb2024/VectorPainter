@@ -72,7 +72,8 @@ class Painter(DiffVGState):
                 self.canvas_width,
             )
 
-            self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) + (self.control_points_per_seg - 2)
+            self.num_control_points = torch.zeros(self.num_segments, dtype=torch.int32) \
+                                      + (self.control_points_per_seg - 2)
             for i in range(s.shape[0]):
                 points = []
                 points.append((s[i][0], s[i][1]))
@@ -80,17 +81,17 @@ class Painter(DiffVGState):
                 points.append((e[i][0], e[i][1]))
 
                 points = torch.tensor(points).to(self.device)
-                path = pydiffvg.Path(num_control_points=torch.tensor(self.num_control_points),
-                                    points=points,
-                                    stroke_width=torch.tensor(width[i]),
-                                    is_closed=False)
+                path = pydiffvg.Path(num_control_points=self.num_control_points,
+                                     points=points,
+                                     stroke_width=torch.tensor(width[i]),
+                                     is_closed=False)
                 self.shapes.append(path)
                 self.strokes_counter += 1
 
                 stroke_color = torch.tensor([color[i][0], color[i][1], color[i][2], 1.0])
                 path_group = pydiffvg.ShapeGroup(shape_ids=torch.tensor([len(self.shapes) - 1]),
-                                                fill_color=None,
-                                                stroke_color=stroke_color)
+                                                 fill_color=None,
+                                                 stroke_color=stroke_color)
                 self.shape_groups.append(path_group)
             self.optimize_flag = [True for _ in range(len(self.shapes))]
 
