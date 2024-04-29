@@ -22,7 +22,7 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 
 
-class VectorPainterTransferPipeline(ModelState):
+class VectorPainterStyleTransferPipeline(ModelState):
     def __init__(self, args):
         logdir_ = f"seed{args.seed}-im{args.x.image_size}" \
                   f"-{args.x.model_id}" \
