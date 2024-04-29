@@ -42,7 +42,7 @@ framerate: 24 # by adjusting the frame rate, you can control the playback speed 
 hydra:
   help:
     # app name, override to match the name your app is known by
-    app_name: 'StrokeStyle'
+    app_name: 'VectorPainter'
   run:
     # output directory for normal runs
     # warning: make sure that the L53-55 of './libs/utils/model_state.py' and 'dir' are modified together

@@ -1,4 +1,4 @@
-method: "StrokeStyleTransfer"
+method: "VectorPainterStyleTransfer"
 
 image_size: 512
 path_svg: ~
