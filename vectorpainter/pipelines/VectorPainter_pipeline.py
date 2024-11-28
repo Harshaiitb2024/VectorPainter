@@ -8,14 +8,14 @@ import diffusers
 import numpy as np
 import torch
 import torch.nn.functional as F
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from PIL import Image
 from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline, model2res
 from vectorpainter.libs.engine import ModelState
 from vectorpainter.libs.metric.clip_score import CLIPScoreWrapper
 from vectorpainter.libs.metric.lpips_origin import LPIPS
-from vectorpainter.painter import (LSDSPipeline, LSDSSDXLPipeline, Painter, SketchPainterOptimizer, get_relative_pos,
-                                   bezier_curve_loss)
+from vectorpainter.painter import (LSDSPipeline, LSDSSDXLPipeline, Painter, SinkhornLoss,
+                                   SketchPainterOptimizer, get_relative_pos, bezier_curve_loss)
 from vectorpainter.painter.sketch_utils import fix_image_scale
 from vectorpainter.token2attn.ptp_utils import view_images
 from vectorpainter.utils.plot import plot_couple, plot_img
@@ -150,6 +150,7 @@ class VectorPainterPipeline(ModelState):
         # log params
         init_relative_pos = get_relative_pos(renderer.get_points_params()).detach()  # init stroke position as GT
         init_curves = copy.deepcopy(renderer.get_points_params())
+        sinkhorn_loss_fn = SinkhornLoss(device=self.device)
 
         self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
         self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
@@ -228,6 +229,9 @@ class VectorPainterPipeline(ModelState):
                     elif self.x_cfg.pos_type == 'bez':
                         l_rel_pos = bezier_curve_loss(renderer.get_points_params(), init_curves) \
                                     * self.x_cfg.pos_loss_weight
+                    elif self.x_cfg.pos_type == 'sinkhorn':
+                        l_rel_pos = sinkhorn_loss_fn(raster_sketch, style_img) \
+                                    * self.x_cfg.pos_loss_weight
 
                 # total loss
                 loss = sds_loss + total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
@@ -244,7 +248,8 @@ class VectorPainterPipeline(ModelState):
                 # records
                 pbar.set_description(
                     f"lr: {optimizer.get_lr():.2f}, "
-                    f"l_pos: {l_rel_pos.item():.5f}, "
+                    f"l_pos: {l_rel_pos.item():.4f}, "
+                    f"l_style: {l_percep_style.item():.4f}, "
                     f"l_total: {loss.item():.4f}"
                 )
 

@@ -18,7 +18,7 @@ width_lr: 0.01
 max_width: 50 # stroke width
 
 # position loss weight
-pos_type: 'pos' # 'bez'
+pos_type: 'sinkhorn' # 'pos', 'bez', 'sinkhorn'
 pos_loss_weight: 1.0
 
 # stroke attrs
