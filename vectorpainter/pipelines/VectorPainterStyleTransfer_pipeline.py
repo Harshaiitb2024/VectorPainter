@@ -8,14 +8,15 @@ import diffusers
 import numpy as np
 import torch
 import torch.nn.functional as F
-from moviepy.editor import VideoFileClip
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+from moviepy import VideoFileClip
 from PIL import Image
 from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline, model2res
 from vectorpainter.libs.engine import ModelState
 from vectorpainter.libs.metric.clip_score import CLIPScoreWrapper
 from vectorpainter.libs.metric.lpips_origin import LPIPS
-from vectorpainter.painter import (LSDSPipeline, LSDSSDXLPipeline, Painter,
-                                   SketchPainterOptimizer, get_relative_pos)
+from vectorpainter.painter import (Painter, SketchPainterOptimizer,
+                                   SinkhornLoss, get_relative_pos, bezier_curve_loss)
 from vectorpainter.painter.sketch_utils import fix_image_scale
 from vectorpainter.utils.plot import plot_couple, plot_img
 from torchvision import transforms
@@ -61,11 +62,11 @@ class VectorPainterStyleTransferPipeline(ModelState):
             self.frame_log_dir.mkdir(parents=True, exist_ok=True)
 
         if self.x_cfg.model_id == "sdxl":
-            custom_pipeline = LSDSSDXLPipeline
+            custom_pipeline = StableDiffusionXLPipeline
             # custom_scheduler = diffusers.DPMSolverMultistepScheduler
             custom_scheduler = diffusers.EulerDiscreteScheduler
         else:  # sd21, sd14, sd15
-            custom_pipeline = LSDSPipeline
+            custom_pipeline = StableDiffusionPipeline
             custom_scheduler = diffusers.DDIMScheduler
 
         self.diffusion = init_StableDiffusion_pipeline(

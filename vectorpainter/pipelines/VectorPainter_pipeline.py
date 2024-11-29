@@ -8,14 +8,15 @@ import diffusers
 import numpy as np
 import torch
 import torch.nn.functional as F
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
 from moviepy import VideoFileClip
 from PIL import Image
 from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline, model2res
 from vectorpainter.libs.engine import ModelState
 from vectorpainter.libs.metric.clip_score import CLIPScoreWrapper
 from vectorpainter.libs.metric.lpips_origin import LPIPS
-from vectorpainter.painter import (LSDSPipeline, LSDSSDXLPipeline, Painter, SinkhornLoss,
-                                   SketchPainterOptimizer, get_relative_pos, bezier_curve_loss)
+from vectorpainter.painter import (Painter, SketchPainterOptimizer,
+                                   SinkhornLoss, get_relative_pos, bezier_curve_loss)
 from vectorpainter.painter.sketch_utils import fix_image_scale
 from vectorpainter.token2attn.ptp_utils import view_images
 from vectorpainter.utils.plot import plot_couple, plot_img
@@ -40,24 +41,11 @@ class VectorPainterPipeline(ModelState):
         self.svg_logs_dir = self.result_path / "svg_logs"
         self.log_dir = self.result_path / "configs"
 
-        # use dir name to save logs
-        self.clip_vis_loss_dir = self.log_dir / f"clip_vis_loss_({args.x.clip.vis_loss})"
-        self.sds_grad_scale_dir = self.log_dir / f"sds_grad_scale_({args.x.sds.grad_scale})"
-        self.style_coeff_dir = self.log_dir / f"style_coeff_({args.x.perceptual.style_coeff})"
-        self.pos_loss_weight_dir = self.log_dir / f"pos_loss_weight_({args.x.pos_loss_weight})"
-        self.prompt_dir = self.log_dir / f"prompt_{args.prompt}"
-
         if self.accelerator.is_main_process:
             self.style_dir.mkdir(parents=True, exist_ok=True)
             self.sd_sample_dir.mkdir(parents=True, exist_ok=True)
             self.png_logs_dir.mkdir(parents=True, exist_ok=True)
             self.svg_logs_dir.mkdir(parents=True, exist_ok=True)
-
-            self.clip_vis_loss_dir.mkdir(parents=True, exist_ok=True)
-            self.sds_grad_scale_dir.mkdir(parents=True, exist_ok=True)
-            self.style_coeff_dir.mkdir(parents=True, exist_ok=True)
-            self.pos_loss_weight_dir.mkdir(parents=True, exist_ok=True)
-            self.prompt_dir.mkdir(parents=True, exist_ok=True)
 
         self.make_video = self.args.mv
         if self.make_video:
@@ -66,11 +54,11 @@ class VectorPainterPipeline(ModelState):
             self.frame_log_dir.mkdir(parents=True, exist_ok=True)
 
         if self.x_cfg.model_id == "sdxl":
-            custom_pipeline = LSDSSDXLPipeline
+            custom_pipeline = StableDiffusionXLPipeline
             # custom_scheduler = diffusers.DPMSolverMultistepScheduler
             custom_scheduler = diffusers.EulerDiscreteScheduler
         else:  # sd21, sd14, sd15
-            custom_pipeline = LSDSPipeline
+            custom_pipeline = StableDiffusionPipeline
             custom_scheduler = diffusers.DDIMScheduler
 
         self.diffusion = init_StableDiffusion_pipeline(
@@ -102,7 +90,7 @@ class VectorPainterPipeline(ModelState):
     def painterly_rendering(self, text_prompt, style_fpath):
         self.print(f"start painterly rendering with text prompt: {text_prompt}")
         # generate content image using diffusion model
-        content_img = self.diffusion_sampling(text_prompt)
+        content_img = self.diffusion_sampling(text_prompt, style_fpath)
 
         timesteps_ = self.diffusion.scheduler.timesteps.cpu().numpy().tolist()
         self.print(f"{len(timesteps_)} denoising steps, {timesteps_}")
@@ -166,21 +154,6 @@ class VectorPainterPipeline(ModelState):
                     plot_img(raster_sketch, self.frame_log_dir, fname=f"iter{self.frame_idx}")
                     self.frame_idx += 1
 
-                sds_loss, grad = torch.tensor(0), torch.tensor(0)
-                if self.step >= self.x_cfg.sds.warmup:
-                    grad_scale = self.x_cfg.sds.grad_scale if self.step > self.x_cfg.sds.warmup else 0
-                    if grad_scale > 0:
-                        sds_loss, grad = self.diffusion.score_distillation_sampling(
-                            raster_sketch,
-                            crop_size=self.x_cfg.sds.crop_size,
-                            augments=self.x_cfg.sds.augmentations,
-                            prompt=[text_prompt],
-                            negative_prompt=self.args.neg_prompt,
-                            guidance_scale=self.x_cfg.sds.guidance_scale,
-                            grad_scale=grad_scale,
-                            t_range=list(self.x_cfg.sds.t_range),
-                        )
-
                 # CLIP data augmentation
                 raster_sketch_aug, inputs_aug = self.clip_pair_augment(
                     raster_sketch, inputs,
@@ -209,13 +182,13 @@ class VectorPainterPipeline(ModelState):
                 # perceptual loss with style image
                 l_percep_style = torch.tensor(0.)
                 if self.step > self.x_cfg.perceptual.style_warmup:
-                    if self.x_cfg.perceptual.style_coeff > 0 and perceptual_loss_fn is not None:
+                    if self.x_cfg.perceptual.style_coeff > 0:
                         l_perceptual = perceptual_loss_fn(style_img, raster_sketch).mean()
                         l_percep_style = l_perceptual * self.x_cfg.perceptual.style_coeff
 
                 # prep with inputs
                 l_percep_content = torch.tensor(0.)
-                if self.x_cfg.perceptual.content_coeff > 0 and perceptual_loss_fn is not None:
+                if self.x_cfg.perceptual.content_coeff > 0:
                     l_perceptual_ = perceptual_loss_fn(inputs, raster_sketch).mean()
                     l_percep_content = l_perceptual_ * self.x_cfg.perceptual.content_coeff
 
@@ -227,14 +200,12 @@ class VectorPainterPipeline(ModelState):
                             get_relative_pos(renderer.get_points_params()), init_relative_pos
                         ).mean() * self.x_cfg.pos_loss_weight
                     elif self.x_cfg.pos_type == 'bez':
-                        l_rel_pos = bezier_curve_loss(renderer.get_points_params(), init_curves) \
-                                    * self.x_cfg.pos_loss_weight
+                        l_rel_pos = bezier_curve_loss(renderer.get_points_params(), init_curves) * self.x_cfg.pos_loss_weight
                     elif self.x_cfg.pos_type == 'sinkhorn':
-                        l_rel_pos = sinkhorn_loss_fn(raster_sketch, style_img) \
-                                    * self.x_cfg.pos_loss_weight
+                        l_rel_pos = sinkhorn_loss_fn(raster_sketch, style_img) * self.x_cfg.pos_loss_weight
 
                 # total loss
-                loss = sds_loss + total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
+                loss = total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
 
                 # optimization
                 optimizer.zero_grad_()
@@ -289,13 +260,26 @@ class VectorPainterPipeline(ModelState):
 
         self.close(msg="painterly rendering complete.")
 
-    def diffusion_sampling(self, prompts):
+    def diffusion_sampling(self, prompts, style_fpath):
         height = width = model2res(self.x_cfg.model_id)
+        self.diffusion.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
+        self.diffusion.enable_vae_tiling()
+
+        # configure ip-adapter scales.
+        # for style blocks only
+        scale = {
+            "up": {"block_0": [0.0, 1.0, 0.0]},
+        }
+        self.diffusion.set_ip_adapter_scale(scale)
+        img = Image.open(style_fpath).convert("RGB")
+        img.resize((height, width))
+
         outputs = self.diffusion(
             prompt=[prompts],
             negative_prompt=self.args.neg_prompt,
             height=height,
             width=width,
+            ip_adapter_image=img,
             num_inference_steps=self.x_cfg.num_inference_steps,
             guidance_scale=self.x_cfg.guidance_scale,
             generator=self.g_device

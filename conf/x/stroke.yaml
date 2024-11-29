@@ -27,18 +27,18 @@ num_paths: 5000 # number of strokes
 width: 1.5 # stroke width
 control_points_per_seg: 3 # Number of points to sample per parametrized curve.
 num_segments: 1
-optim_opacity: False # if True, the stroke opacity is optimized
+optim_opacity: True # if True, the stroke opacity is optimized
 optim_width: True # if True, the stroke width is optimized
 optim_rgba: True # if True, the stroke RGBA is optimized
 
 # diffusion
-model_id: "sd15" # sd14, sd15, sd21, sd21b, sdxl
+model_id: "sdxl" # sd14, sd15, sd21, sd21b, sdxl
 ldm_speed_up: False
 enable_xformers: False
 gradient_checkpoint: False
 cpu_offload: True
 num_inference_steps: 100
-guidance_scale: 7.5 # sdxl default 5.0
+guidance_scale: 5.0 # sdxl default 5.0
 
 clip:
   model_name: "RN101" # RN101, ViT-L/14
@@ -51,17 +51,9 @@ clip:
   vis_loss: 1 # 1 or 0 for use or disable clip visual loss
   text_visual_coeff: 0 # cosine similarity between text and img
 
-sds:
-  crop_size: 512
-  augmentations: "affine"
-  guidance_scale: 100
-  grad_scale: 5e-6
-  t_range: [ 0.05, 0.95 ]
-  warmup: 1200
-
 perceptual:
   name: "lpips"
   lpips_net: "vgg"
-  content_coeff: 0
-  style_coeff: 0.5
-  style_warmup: 600
+  content_coeff: 1.0
+  style_coeff: 0
+  style_warmup: 0
