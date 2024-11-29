@@ -220,7 +220,6 @@ class VectorPainterPipeline(ModelState):
                 pbar.set_description(
                     f"lr: {optimizer.get_lr():.2f}, "
                     f"l_pos: {l_rel_pos.item():.4f}, "
-                    f"l_style: {l_percep_style.item():.4f}, "
                     f"l_total: {loss.item():.4f}"
                 )
 
