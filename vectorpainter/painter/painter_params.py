@@ -248,7 +248,7 @@ class Painter(DiffVGState):
         if self.optim_rgba:
             for group in self.shape_groups:
                 group.stroke_color.data.clamp_(0.0, 1.0)
-                group.stroke_color.data[-1].clamp_(1.0, 1.0)  # force full opacity
+                # group.stroke_color.data[-1].clamp_(1.0, 1.0)  # force full opacity
         else:
             if self.optim_alpha:
                 for group in self.shape_groups:

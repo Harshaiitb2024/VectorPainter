@@ -19,7 +19,7 @@ from diffusers import StableDiffusionXLPipeline
 import torch
 from tqdm import tqdm
 import numpy as np
-
+from PIL import Image
 
 T = torch.Tensor
 TN = T | None
@@ -67,9 +67,9 @@ def _encode_text_sdxl_with_negative(model: StableDiffusionXLPipeline, prompt: st
     return added_cond_kwargs, prompt_embeds
 
 
-def _encode_image(model: StableDiffusionXLPipeline, image: np.ndarray) -> T:
+def _encode_image(model: StableDiffusionXLPipeline, image: Image.Image) -> T:
     model.vae.to(dtype=torch.float32)
-    image = torch.from_numpy(image).float() / 255.
+    image = torch.from_numpy(np.array(image)).float() / 255.
     image = (image * 2 - 1).permute(2, 0, 1).unsqueeze(0)
     latent = model.vae.encode(image.to(model.vae.device))['latent_dist'].mean * model.vae.config.scaling_factor
     model.vae.to(dtype=model.unet.dtype)
@@ -118,7 +118,7 @@ def make_inversion_callback(zts, offset: int = 0) -> [T, InversionCallback]:
 
 
 @torch.no_grad()
-def ddim_inversion(model: StableDiffusionXLPipeline, x0: np.ndarray, prompt: str, num_inference_steps: int, guidance_scale,) -> T:
+def ddim_inversion(model: StableDiffusionXLPipeline, x0: Image.Image, prompt: str, num_inference_steps: int, guidance_scale,) -> T:
     z0 = _encode_image(model, x0)
     model.scheduler.set_timesteps(num_inference_steps, device=z0.device)
     zs = _ddim_loop(model, z0, prompt, guidance_scale)

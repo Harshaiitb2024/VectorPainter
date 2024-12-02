@@ -13,9 +13,9 @@ lr_scheduler: False
 lr_decay_rate: 0.1
 decay_steps: [ 1000, 1500 ]
 lr: 1
-color_lr: 0.2
+color_lr: 0.05
 color_vars_threshold: 0.0 # uncomment the code
-width_lr: 0.01
+width_lr: 0.1
 max_width: 50 # stroke width
 
 # position loss weight
@@ -39,7 +39,7 @@ enable_xformers: False
 gradient_checkpoint: False
 cpu_offload: True
 num_inference_steps: 100
-guidance_scale: 5.0 # sdxl default 5.0
+guidance_scale: 10.0 # sdxl default 5.0
 
 clip:
   model_name: "RN101" # RN101, ViT-L/14

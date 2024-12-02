@@ -90,22 +90,8 @@ class VectorPainterPipeline(ModelState):
         )
 
     def painterly_rendering(self, text_prompt, style_fpath):
-        # process style file
-        style_img = self.load_and_process_style_file(style_fpath)
-        plot_img(style_img, self.style_dir, fname="style_image_preprocess")
-
         self.print(f"start painterly rendering with text prompt: {text_prompt}")
-        # generate content image using diffusion model
         content_img = self.diffusion_sampling(text_prompt, style_fpath)
-
-        timesteps_ = self.diffusion.scheduler.timesteps.cpu().numpy().tolist()
-        self.print(f"{len(timesteps_)} denoising steps, {timesteps_}")
-        # or from image file
-        # content_img = Image.open(style_fpath).convert("RGB")
-        # process_comp = transforms.Compose([
-        #     transforms.Resize(size=(self.x_cfg.image_size, self.x_cfg.image_size))
-        # ])
-        # content_img = process_comp(content_img)
 
         perceptual_loss_fn = None
         if self.x_cfg.perceptual.content_coeff > 0 or self.x_cfg.perceptual.style_coeff > 0:
@@ -118,7 +104,9 @@ class VectorPainterPipeline(ModelState):
             self.x_cfg.fix_scale
         )
         inputs = inputs.detach()  # inputs as GT
-        self.print("inputs shape: ", inputs.shape)
+        # process style file
+        style_img = self.load_and_process_style_file(style_fpath)
+        plot_img(style_img, self.style_dir, fname="style_image_preprocess")
 
         # load renderer
         renderer = self.load_render(inputs, style_img)
@@ -147,8 +135,7 @@ class VectorPainterPipeline(ModelState):
         with tqdm(initial=self.step, total=total_iter, disable=not self.accelerator.is_main_process) as pbar:
             while self.step < total_iter:
                 raster_sketch = renderer.get_image().to(self.device)
-                # l2 loss
-                loss = F.mse_loss(raster_sketch, style_img)
+                loss = F.mse_loss(style_img, raster_sketch)
 
                 # optimization
                 optimizer.zero_grad_()
@@ -168,7 +155,7 @@ class VectorPainterPipeline(ModelState):
                 # log raster and svg
                 if self.step % self.args.save_step == 0 and self.accelerator.is_main_process:
                     # log png
-                    plot_couple(inputs,
+                    plot_couple(style_img,
                                 raster_sketch,
                                 self.step,
                                 output_dir=self.png_logs_dir.as_posix(),
@@ -179,6 +166,11 @@ class VectorPainterPipeline(ModelState):
 
                 self.step += 1
                 pbar.update(1)
+
+        # save style result
+        renderer.save_svg(self.result_path.as_posix(), "style_result")
+        style_result = renderer.get_image().to(self.device)
+        plot_img(style_result, self.result_path, fname='style_result')
 
         # log params
         init_relative_pos = get_relative_pos(renderer.get_points_params()).detach()  # init stroke position as GT
@@ -308,25 +300,28 @@ class VectorPainterPipeline(ModelState):
         self.close(msg="painterly rendering complete.")
 
     @torch.no_grad()
-    def diffusion_sampling(self, prompts, style_fpath):
-        height = width = model2res(self.x_cfg.model_id)
-
-        style_img = Image.open(style_fpath).convert("RGB").resize((height, width))
-
+    def captioning(self, style_fpath):
         from transformers import Blip2ForConditionalGeneration, Blip2Processor
         blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-6.7b")
         blip2_model = Blip2ForConditionalGeneration.from_pretrained(
             "Salesforce/blip2-opt-6.7b", load_in_8bit=True, device_map={"": 0},
             torch_dtype=torch.float16
         )  # doctest: +IGNORE_RESULT
+        style_img = Image.open(style_fpath).convert("RGB")
         inputs = blip2_processor(images=style_img, return_tensors="pt").to(torch.float16)
         generated_ids = blip2_model.generate(**inputs)
         src_prompt = blip2_processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
         self.print(f"src_prompt: {src_prompt}")
         del blip2_processor, blip2_model
         torch.cuda.empty_cache()
+        return src_prompt
 
-        x0 = np.array(load_image(style_fpath).resize((1024, 1024)))
+    def diffusion_sampling(self, prompts, style_fpath):
+        height = width = model2res(self.x_cfg.model_id)
+
+        src_prompt = self.captioning(style_fpath)
+        style_img = Image.open(style_fpath).convert("RGB").resize((height, width))
+        x0 = style_img.copy()
         zts = inversion.ddim_inversion(self.diffusion, x0, src_prompt, self.x_cfg.num_inference_steps, 2)
         handler = sa_handler.Handler(self.diffusion)
         sa_args = sa_handler.StyleAlignedArgs(share_group_norm=True, share_layer_norm=True, share_attention=True,
@@ -355,15 +350,21 @@ class VectorPainterPipeline(ModelState):
             width=width,
             ip_adapter_image=style_img,
             num_inference_steps=self.x_cfg.num_inference_steps,
-            guidance_scale=10.0,
+            guidance_scale=self.x_cfg.guidance_scale,
             generator=self.g_device,
             latents=latents,
             callback_on_step_end=inversion_callback,
-        ).images[-1]
+        ).images
         target_file = self.sd_sample_dir / 'sample.png'
-        # view_images([np.array(img) for img in outputs.images], save_image=True, fp=target_file)
-        view_images([np.array(outputs)], save_image=True, fp=target_file)
+        view_images([np.array(outputs[-1])], save_image=True, fp=target_file)
         target = Image.open(target_file)
+
+        timesteps_ = self.diffusion.scheduler.timesteps.cpu().numpy().tolist()
+        self.print(f"{len(timesteps_)} denoising steps, {timesteps_}")
+
+        del self.diffusion
+        torch.cuda.empty_cache()
+
         return target
 
     def load_and_process_style_file(self, style_fpath):
