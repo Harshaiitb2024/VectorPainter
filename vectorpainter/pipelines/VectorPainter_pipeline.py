@@ -9,13 +9,14 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+from diffusers.utils import load_image
 from moviepy import VideoFileClip
 from PIL import Image
 from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline, model2res
 from vectorpainter.libs.engine import ModelState
 from vectorpainter.libs.metric.clip_score import CLIPScoreWrapper
 from vectorpainter.libs.metric.lpips_origin import LPIPS
-from vectorpainter.painter import (Painter, SketchPainterOptimizer,
+from vectorpainter.painter import (Painter, SketchPainterOptimizer, inversion, sa_handler,
                                    SinkhornLoss, get_relative_pos, bezier_curve_loss)
 from vectorpainter.painter.sketch_utils import fix_image_scale
 from vectorpainter.token2attn.ptp_utils import view_images
@@ -56,7 +57,8 @@ class VectorPainterPipeline(ModelState):
         if self.x_cfg.model_id == "sdxl":
             custom_pipeline = StableDiffusionXLPipeline
             # custom_scheduler = diffusers.DPMSolverMultistepScheduler
-            custom_scheduler = diffusers.EulerDiscreteScheduler
+            custom_scheduler = diffusers.DDIMScheduler
+            # custom_scheduler = diffusers.EulerDiscreteScheduler
         else:  # sd21, sd14, sd15
             custom_pipeline = StableDiffusionPipeline
             custom_scheduler = diffusers.DDIMScheduler
@@ -88,6 +90,10 @@ class VectorPainterPipeline(ModelState):
         )
 
     def painterly_rendering(self, text_prompt, style_fpath):
+        # process style file
+        style_img = self.load_and_process_style_file(style_fpath)
+        plot_img(style_img, self.style_dir, fname="style_image_preprocess")
+
         self.print(f"start painterly rendering with text prompt: {text_prompt}")
         # generate content image using diffusion model
         content_img = self.diffusion_sampling(text_prompt, style_fpath)
@@ -100,10 +106,6 @@ class VectorPainterPipeline(ModelState):
         #     transforms.Resize(size=(self.x_cfg.image_size, self.x_cfg.image_size))
         # ])
         # content_img = process_comp(content_img)
-
-        # process style file
-        style_img = self.load_and_process_style_file(style_fpath)
-        plot_img(style_img, self.style_dir, fname="style_image_preprocess")
 
         perceptual_loss_fn = None
         if self.x_cfg.perceptual.content_coeff > 0 or self.x_cfg.perceptual.style_coeff > 0:
@@ -135,11 +137,57 @@ class VectorPainterPipeline(ModelState):
                                            self.x_cfg.width_lr)
         optimizer.init_optimizers()
 
+        self.print(f"-> Start stage 1 ...")
+        self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
+        self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
+        self.print(f"-> Painter color Params: {len(renderer.get_color_parameters())}")
+
+        total_iter = self.x_cfg.stage_1_num_iter
+        self.print(f"\ntotal optimization steps: {total_iter}")
+        with tqdm(initial=self.step, total=total_iter, disable=not self.accelerator.is_main_process) as pbar:
+            while self.step < total_iter:
+                raster_sketch = renderer.get_image().to(self.device)
+                # l2 loss
+                loss = F.mse_loss(raster_sketch, style_img)
+
+                # optimization
+                optimizer.zero_grad_()
+                loss.backward()
+                optimizer.step_()
+
+                # update lr
+                if self.x_cfg.lr_scheduler:
+                    optimizer.update_lr(self.step, self.x_cfg.decay_steps)
+
+                # records
+                pbar.set_description(
+                    f"lr: {optimizer.get_lr():.2f}, "
+                    f"l_total: {loss.item():.4f}"
+                )
+
+                # log raster and svg
+                if self.step % self.args.save_step == 0 and self.accelerator.is_main_process:
+                    # log png
+                    plot_couple(inputs,
+                                raster_sketch,
+                                self.step,
+                                output_dir=self.png_logs_dir.as_posix(),
+                                fname=f"iter{self.step}",
+                                prompt=text_prompt)
+                    # log svg
+                    renderer.save_svg(self.svg_logs_dir.as_posix(), f"svg_iter{self.step}")
+
+                self.step += 1
+                pbar.update(1)
+
         # log params
         init_relative_pos = get_relative_pos(renderer.get_points_params()).detach()  # init stroke position as GT
         init_curves = copy.deepcopy(renderer.get_points_params())
         sinkhorn_loss_fn = SinkhornLoss(device=self.device)
+        # reinit optimizer
+        optimizer.init_optimizers()
 
+        self.print(f"\n-> Start stage 2 ...")
         self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
         self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
         self.print(f"-> Painter color Params: {len(renderer.get_color_parameters())}")
@@ -259,32 +307,62 @@ class VectorPainterPipeline(ModelState):
 
         self.close(msg="painterly rendering complete.")
 
+    @torch.no_grad()
     def diffusion_sampling(self, prompts, style_fpath):
         height = width = model2res(self.x_cfg.model_id)
-        self.diffusion.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
-        self.diffusion.enable_vae_tiling()
 
-        # configure ip-adapter scales.
-        # for style blocks only
+        style_img = Image.open(style_fpath).convert("RGB").resize((height, width))
+
+        from transformers import Blip2ForConditionalGeneration, Blip2Processor
+        blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-6.7b")
+        blip2_model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-6.7b", load_in_8bit=True, device_map={"": 0},
+            torch_dtype=torch.float16
+        )  # doctest: +IGNORE_RESULT
+        inputs = blip2_processor(images=style_img, return_tensors="pt").to(torch.float16)
+        generated_ids = blip2_model.generate(**inputs)
+        src_prompt = blip2_processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+        self.print(f"src_prompt: {src_prompt}")
+        del blip2_processor, blip2_model
+        torch.cuda.empty_cache()
+
+        x0 = np.array(load_image(style_fpath).resize((1024, 1024)))
+        zts = inversion.ddim_inversion(self.diffusion, x0, src_prompt, self.x_cfg.num_inference_steps, 2)
+        handler = sa_handler.Handler(self.diffusion)
+        sa_args = sa_handler.StyleAlignedArgs(share_group_norm=True, share_layer_norm=True, share_attention=True,
+                                              adain_queries=True, adain_keys=True, adain_values=False,
+                                              shared_score_shift=np.log(2), shared_score_scale=1.0)
+
+        handler.register(sa_args)
+        zT, inversion_callback = inversion.make_inversion_callback(zts, offset=5)
+
+        prompts = [src_prompt, prompts]
+        latents = torch.randn(len(prompts), 4, 128, 128, device=self.device, generator=self.g_device,
+                              dtype=self.diffusion.unet.dtype).to(self.device)
+        latents[0] = zT
+
         scale = {
             "up": {"block_0": [0.0, 1.0, 0.0]},
         }
+        self.diffusion.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
+        self.diffusion.enable_vae_tiling()
         self.diffusion.set_ip_adapter_scale(scale)
-        img = Image.open(style_fpath).convert("RGB")
-        img.resize((height, width))
 
         outputs = self.diffusion(
-            prompt=[prompts],
+            prompt=prompts,
             negative_prompt=self.args.neg_prompt,
             height=height,
             width=width,
-            ip_adapter_image=img,
+            ip_adapter_image=style_img,
             num_inference_steps=self.x_cfg.num_inference_steps,
-            guidance_scale=self.x_cfg.guidance_scale,
-            generator=self.g_device
-        )
+            guidance_scale=10.0,
+            generator=self.g_device,
+            latents=latents,
+            callback_on_step_end=inversion_callback,
+        ).images[-1]
         target_file = self.sd_sample_dir / 'sample.png'
-        view_images([np.array(img) for img in outputs.images], save_image=True, fp=target_file)
+        # view_images([np.array(img) for img in outputs.images], save_image=True, fp=target_file)
+        view_images([np.array(outputs)], save_image=True, fp=target_file)
         target = Image.open(target_file)
         return target
 

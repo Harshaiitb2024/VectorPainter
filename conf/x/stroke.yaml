@@ -5,6 +5,7 @@ path_svg: ~
 fix_scale: False # if the target image is not squared, it is recommended to fix the scale
 
 # train
+stage_1_num_iter: 500
 num_iter: 2000
 batch_size: 1
 num_stages: 1 # training stages, you can train x strokes, then freeze them and train another x strokes etc
