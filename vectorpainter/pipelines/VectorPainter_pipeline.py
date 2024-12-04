@@ -184,6 +184,16 @@ class VectorPainterPipeline(ModelState):
         self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
         self.print(f"-> Painter color Params: {len(renderer.get_color_parameters())}")
 
+        if self.x_cfg.struct_loss_weight > 0:
+            if self.x_cfg.struct_loss == 'ssim':
+                from vectorpainter.painter import SSIM
+                l_struct_fn = SSIM()
+            elif self.x_cfg.struct_loss == 'msssim':
+                from vectorpainter.painter import MSSSIM
+                l_struct_fn = MSSSIM()
+            else:
+                l_struct_fn = lambda x, y: torch.tensor(0.)  # zero loss
+
         total_iter = self.x_cfg.num_iter
         self.print(f"\ntotal optimization steps: {total_iter}")
         with tqdm(initial=self.step, total=total_iter, disable=not self.accelerator.is_main_process) as pbar:
@@ -194,43 +204,55 @@ class VectorPainterPipeline(ModelState):
                     plot_img(raster_sketch, self.frame_log_dir, fname=f"iter{self.frame_idx}")
                     self.frame_idx += 1
 
-                # CLIP data augmentation
-                raster_sketch_aug, inputs_aug = self.clip_pair_augment(
-                    raster_sketch, inputs,
-                    im_res=224,
-                    augments=self.cargs.augmentations,
-                    num_aug=self.cargs.num_aug
-                )
+                l2_loss = torch.tensor(0.)
+                if self.x_cfg.l2_loss > 0:
+                    l2_loss = F.mse_loss(raster_sketch, inputs) * self.x_cfg.l2_loss
 
-                # clip visual loss
-                total_visual_loss = torch.tensor(0.)
-                l_clip_fc, l_clip_conv, clip_conv_loss_sum = torch.tensor(0), [], torch.tensor(0)
-                if self.x_cfg.clip.vis_loss > 0:
-                    l_clip_fc, l_clip_conv = self.clip_score_fn.compute_visual_distance(
-                        raster_sketch_aug, inputs_aug, clip_norm=False
-                    )
-                    clip_conv_loss_sum = sum(l_clip_conv)
-                    total_visual_loss = self.x_cfg.clip.vis_loss * (clip_conv_loss_sum + l_clip_fc)
+                # Struct Loss
+                l_struct = torch.tensor(0.)
+                if self.x_cfg.struct_loss_weight > 0:
+                    if self.x_cfg.struct_loss in ['ssim', 'msssim']:
+                        l_struct = 1. - l_struct_fn(raster_sketch, inputs)
+                    else:
+                        l_struct = l_struct_fn(raster_sketch, inputs)
 
-                # text-visual loss
-                l_tvd = torch.tensor(0.)
-                if self.cargs.text_visual_coeff > 0:
-                    l_tvd = self.clip_score_fn.compute_text_visual_distance(
-                        raster_sketch_aug, text_prompt
-                    ) * self.cargs.text_visual_coeff
+                # # CLIP data augmentation
+                # raster_sketch_aug, inputs_aug = self.clip_pair_augment(
+                #     raster_sketch, inputs,
+                #     im_res=224,
+                #     augments=self.cargs.augmentations,
+                #     num_aug=self.cargs.num_aug
+                # )
 
-                # perceptual loss with style image
-                l_percep_style = torch.tensor(0.)
-                if self.step > self.x_cfg.perceptual.style_warmup:
-                    if self.x_cfg.perceptual.style_coeff > 0:
-                        l_perceptual = perceptual_loss_fn(style_img, raster_sketch).mean()
-                        l_percep_style = l_perceptual * self.x_cfg.perceptual.style_coeff
+                # # clip visual loss
+                # total_visual_loss = torch.tensor(0.)
+                # l_clip_fc, l_clip_conv, clip_conv_loss_sum = torch.tensor(0), [], torch.tensor(0)
+                # if self.x_cfg.clip.vis_loss > 0:
+                #     l_clip_fc, l_clip_conv = self.clip_score_fn.compute_visual_distance(
+                #         raster_sketch_aug, inputs_aug, clip_norm=False
+                #     )
+                #     clip_conv_loss_sum = sum(l_clip_conv)
+                #     total_visual_loss = self.x_cfg.clip.vis_loss * (clip_conv_loss_sum + l_clip_fc)
 
-                # prep with inputs
-                l_percep_content = torch.tensor(0.)
-                if self.x_cfg.perceptual.content_coeff > 0:
-                    l_perceptual_ = perceptual_loss_fn(inputs, raster_sketch).mean()
-                    l_percep_content = l_perceptual_ * self.x_cfg.perceptual.content_coeff
+                # # text-visual loss
+                # l_tvd = torch.tensor(0.)
+                # if self.cargs.text_visual_coeff > 0:
+                #     l_tvd = self.clip_score_fn.compute_text_visual_distance(
+                #         raster_sketch_aug, text_prompt
+                #     ) * self.cargs.text_visual_coeff
+
+                # # perceptual loss with style image
+                # l_percep_style = torch.tensor(0.)
+                # if self.step > self.x_cfg.perceptual.style_warmup:
+                #     if self.x_cfg.perceptual.style_coeff > 0:
+                #         l_perceptual = perceptual_loss_fn(style_img, raster_sketch).mean()
+                #         l_percep_style = l_perceptual * self.x_cfg.perceptual.style_coeff
+
+                # # prep with inputs
+                # l_percep_content = torch.tensor(0.)
+                # if self.x_cfg.perceptual.content_coeff > 0:
+                #     l_perceptual_ = perceptual_loss_fn(inputs, raster_sketch).mean()
+                #     l_percep_content = l_perceptual_ * self.x_cfg.perceptual.content_coeff
 
                 # control points relative position loss
                 l_rel_pos = torch.tensor(0.)
@@ -245,7 +267,8 @@ class VectorPainterPipeline(ModelState):
                         l_rel_pos = sinkhorn_loss_fn(raster_sketch, style_img) * self.x_cfg.pos_loss_weight
 
                 # total loss
-                loss = total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
+                # loss = total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
+                loss = l2_loss + l_struct + l_rel_pos
 
                 # optimization
                 optimizer.zero_grad_()

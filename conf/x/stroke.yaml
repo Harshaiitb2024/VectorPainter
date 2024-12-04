@@ -22,6 +22,10 @@ max_width: 50 # stroke width
 pos_type: 'sinkhorn' # 'pos', 'bez', 'sinkhorn'
 pos_loss_weight: 1.0
 
+struct_loss: "ssim" # "ssim", "msssim"
+struct_loss_weight: 0.1
+l2_loss: 0.9
+
 # stroke attrs
 random_init: False
 num_paths: 5000 # number of strokes
