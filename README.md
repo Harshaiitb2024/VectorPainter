@@ -12,7 +12,9 @@ CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, wit
 - BrushStroke Painting
 
 ```shell
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/Starry/brush_mountain' seed=666
+CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
+
+CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" x.imit_stage.num_iter=5 x.torch_compile=false result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
 ```
 
 ### Starry

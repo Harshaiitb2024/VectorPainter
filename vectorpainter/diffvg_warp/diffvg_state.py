@@ -4,7 +4,7 @@
 # Copyright (c) 2023, XiMing Xing.
 # License: MIT License
 import pathlib
-from typing import AnyStr, List, Union
+from typing import AnyStr, Union
 import xml.etree.ElementTree as etree
 
 import torch

@@ -120,10 +120,10 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
     # torch.compile
     if torch_compile:
         if is_torch_version(">=", "2.0.0"):
-            torch._inductor.config.conv_1x1_as_mm = True
-            torch._inductor.config.coordinate_descent_tuning = True
-            torch._inductor.config.epilogue_fusion = False
-            torch._inductor.config.coordinate_descent_check_all_directions = True
+            # torch._inductor.config.conv_1x1_as_mm = True
+            # torch._inductor.config.coordinate_descent_tuning = True
+            # torch._inductor.config.epilogue_fusion = False
+            # torch._inductor.config.coordinate_descent_check_all_directions = True
 
             pipeline.unet.to(memory_format=torch.channels_last)
             pipeline.vae.to(memory_format=torch.channels_last)
@@ -132,7 +132,7 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
             pipeline.unet = torch.compile(pipeline.unet, mode="max-autotune", fullgraph=True)
             pipeline.vae.decode = torch.compile(pipeline.vae.decode, mode="max-autotune", fullgraph=True)
 
-            print(f"=> enable torch.compile on U-Net")
+            print(f"=> enable torch.compile")
         else:
             print(f"=> warning: calling torch.compile speed-up failed, since torch version <= 2.0.0")
 
