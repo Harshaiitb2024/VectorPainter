@@ -2,10 +2,11 @@
 # Author: ximing
 # Copyright (c) 2023, XiMing Xing.
 # License: MPL-2.0 License
+import os
+from typing import AnyStr, Union, Text, List
+import pathlib
 
-from typing import AnyStr
 from PIL import Image
-
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -14,44 +15,64 @@ from torchvision.utils import make_grid
 from .misc import AnyPath
 
 
+def view_images(
+        images: Union[np.ndarray, List[np.ndarray]],
+        num_rows: int = 1,
+        offset_ratio: float = 0.02,
+        save_image: bool = False,
+        fp: Union[Text, pathlib.Path, os.PathLike] = None,
+) -> Image:
+    if save_image:
+        assert fp is not None
+
+    if isinstance(images, list):
+        images = np.concatenate(images, axis=0)
+
+    if isinstance(images, np.ndarray) and images.ndim == 4:
+        num_empty = images.shape[0] % num_rows
+    else:
+        images = [images] if not isinstance(images, list) else images
+        num_empty = len(images) % num_rows
+
+    empty_images = np.ones(images[0].shape, dtype=np.uint8) * 255
+    images = [image.astype(np.uint8) for image in images] + [empty_images] * num_empty
+    num_items = len(images)
+
+    # Calculate the composite image
+    h, w, c = images[0].shape
+    offset = int(h * offset_ratio)
+    num_cols = int(np.ceil(num_items / num_rows))  # count the number of columns
+    image_h = h * num_rows + offset * (num_rows - 1)
+    image_w = w * num_cols + offset * (num_cols - 1)
+    assert image_h > 0, "Invalid image height: {} (num_rows={}, offset_ratio={}, num_items={})".format(
+        image_h, num_rows, offset_ratio, num_items)
+    assert image_w > 0, "Invalid image width: {} (num_cols={}, offset_ratio={}, num_items={})".format(
+        image_w, num_cols, offset_ratio, num_items)
+    image_ = np.ones((image_h, image_w, 3), dtype=np.uint8) * 255
+
+    # Ensure that the last row is filled with empty images if necessary
+    if len(images) % num_cols > 0:
+        empty_images = np.ones(images[0].shape, dtype=np.uint8) * 255
+        num_empty = num_cols - len(images) % num_cols
+        images += [empty_images] * num_empty
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            k = i * num_cols + j
+            if k >= num_items:
+                break
+            image_[i * (h + offset): i * (h + offset) + h, j * (w + offset): j * (w + offset) + w] = images[k]
+
+    pil_img = Image.fromarray(image_)
+    if save_image:
+        pil_img.save(fp)
+    return pil_img
+
+
 def save_image(image_array: np.ndarray, fname: AnyPath):
     image = np.transpose(image_array, (1, 2, 0)).astype(np.uint8)
     pil_image = Image.fromarray(image)
     pil_image.save(fname)
-
-
-def plot_attn(attn: np.ndarray,
-              threshold_map: np.ndarray,
-              inputs: torch.Tensor,
-              inds: np.ndarray,
-              output_path: AnyPath):
-    # currently supports one image (and not a batch)
-    plt.figure(figsize=(10, 5))
-
-    plt.subplot(1, 3, 1)
-    main_im = make_grid(inputs, normalize=True, pad_value=2)
-    main_im = np.transpose(main_im.cpu().numpy(), (1, 2, 0))
-    plt.imshow(main_im, interpolation='nearest')
-    plt.scatter(inds[:, 1], inds[:, 0], s=10, c='red', marker='o')
-    plt.title("input img")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 2)
-    plt.imshow(attn, interpolation='nearest', vmin=0, vmax=1)
-    plt.title("attn map")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 3)
-    threshold_map_ = (threshold_map - threshold_map.min()) / \
-                     (threshold_map.max() - threshold_map.min())
-    plt.imshow(np.nan_to_num(threshold_map_), interpolation='nearest', vmin=0, vmax=1)
-    plt.title("prob softmax")
-    plt.scatter(inds[:, 1], inds[:, 0], s=10, c='red', marker='o')
-    plt.axis("off")
-
-    plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
 
 
 def plot_couple(input_1: torch.Tensor,
@@ -106,10 +127,10 @@ def plot_img(inputs: torch.Tensor,
     grid = make_grid(inputs, normalize=True, pad_value=pad_value)
     ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
 
-    plt.imshow(ndarr)
-    plt.axis("off")
-    plt.tight_layout()
-    plt.close()
+    # plt.imshow(ndarr)
+    # plt.axis("off")
+    # plt.tight_layout()
+    # plt.close()
 
     im = Image.fromarray(ndarr)
     im.save(f"{output_dir}/{fname}.png")

@@ -15,7 +15,7 @@ import numpy as np
 import pydiffvg
 
 from vectorpainter.diffvg_warp import DiffVGState
-from vectorpainter.token2attn.ptp_utils import view_images
+from vectorpainter.utils import view_images
 
 
 class Painter(DiffVGState):
@@ -25,11 +25,11 @@ class Painter(DiffVGState):
             cfg: omegaconf.DictConfig,
             diffvg_cfg: omegaconf.DictConfig,
             style_img: torch.Tensor,
-            style_dir,
-            num_strokes=4,
-            num_segments=4,
-            canvas_size=224,
-            device=None,
+            style_dir: pathlib.Path,
+            num_strokes: int = 4,
+            num_segments: int = 4,
+            canvas_size: int = 512,
+            device=torch.device('cuda'),
     ):
         super(Painter, self).__init__(device, print_timing=diffvg_cfg.print_timing,
                                       canvas_width=canvas_size, canvas_height=canvas_size)
