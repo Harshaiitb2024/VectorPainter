@@ -8,7 +8,7 @@ from .utils import lazy
 
 __getattr__, __dir__, __all__ = lazy.attach(
     __name__,
-    submodules={'engine', 'metric', 'modules', 'solver', 'utils'},
+    submodules={'engine', 'metric', 'modules', 'utils'},
     submod_attrs={}
 )
 

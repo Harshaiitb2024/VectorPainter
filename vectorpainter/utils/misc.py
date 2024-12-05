@@ -4,15 +4,17 @@
 # Copyright (c) 2023, XiMing Xing.
 # License: MPL-2.0 License
 
+import os
 from datetime import datetime
 import random
 import pathlib
 from typing import Any, List, Dict, Union
+from subprocess import call
 
 import omegaconf
 
-"""Add Type"""
-AnyPath = Union[str, pathlib.Path, 'os.PathLike']
+"""Any Type"""
+AnyPath = Union[str, pathlib.Path, os.PathLike]
 AnyList = Union[omegaconf.ListConfig, List]
 AnyDict = Union[omegaconf.DictConfig, Dict]
 
@@ -46,6 +48,11 @@ def get_seed_range(srange: AnyList):
     return seed_range
 
 
-def mkdir(dirs: List[pathlib.Path]):
+def mkdirs(dirs: List[pathlib.Path]):
     for _dir in dirs:
         _dir.mkdir(parents=True, exist_ok=True)
+
+
+def create_video(video_path: pathlib.Path, frame_log_dir: AnyPath, framerate: int):
+    # save .mp4
+    call(["ffmpeg", "-framerate", str(framerate), "-i", frame_log_dir, "-vb", "20M", video_path])

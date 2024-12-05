@@ -3,21 +3,16 @@
 # Description: the main func of this project.
 # Copyright (c) 2023, XiMing Xing.
 
-import os
-import sys
 from functools import partial
 
 from accelerate.utils import set_seed
 import hydra
 import omegaconf
 
-sys.path.append(os.path.split(os.path.abspath(os.path.dirname(__file__)))[0])
-
 from vectorpainter.utils import render_batch_wrap, get_seed_range
 
 METHODS = [
     'VectorPainter',
-    'VectorPainterStyleTransfer',
 ]
 
 
@@ -47,22 +42,23 @@ def main(cfg: omegaconf.DictConfig):
         else:
             cfg.prompt = [cfg.prompt]
 
-        from vectorpainter.pipelines.VectorPainter_pipeline import VectorPainterPipeline
+        from vectorpainter.pipelines import VectorPainterPipeline
+
         for prompt in cfg.prompt:
             cfg.prompt = prompt.strip()
             if not cfg.multirun:  # generate SVG multiple times
                 pipe = VectorPainterPipeline(cfg)
-                pipe.painterly_rendering(cfg.prompt, cfg.target)
+                pipe.painterly_rendering(text_prompt=cfg.prompt,
+                                         negative_prompt=cfg.neg_prompt,
+                                         style_fpath=cfg.style,
+                                         style_prompt=cfg.style_prompt)
             else:  # generate many SVG at once
-                render_batch_fn(pipeline=VectorPainterPipeline, text_prompt=cfg.prompt, style_fpath=cfg.target)
+                render_batch_fn(pipeline=VectorPainterPipeline,
+                                text_prompt=cfg.prompt,
+                                negative_prompt=cfg.neg_prompt,
+                                style_fpath=cfg.style,
+                                style_prompt=cfg.style_prompt)
 
-    elif flag == "VectorPainterStyleTransfer":
-        from vectorpainter.pipelines.VectorPainterStyleTransfer_pipeline import VectorPainterStyleTransferPipeline
-        if not cfg.multirun:
-            pipe = VectorPainterStyleTransferPipeline(cfg)
-            pipe.painterly_rendering(cfg.content, cfg.target)
-        else:
-            render_batch_fn(pipeline=VectorPainterStyleTransferPipeline, content_fpath=cfg.content, style_fpath=cfg.target)
 
 if __name__ == '__main__':
     main()

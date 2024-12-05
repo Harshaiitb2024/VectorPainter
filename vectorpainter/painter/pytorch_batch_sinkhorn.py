@@ -14,11 +14,11 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def sinkhorn_normalized(x, y, epsilon, niter, mass_x=None, mass_y=None):
-
     Wxy = sinkhorn_loss(x, y, epsilon, niter, mass_x, mass_y)
     Wxx = sinkhorn_loss(x, x, epsilon, niter, mass_x, mass_x)
     Wyy = sinkhorn_loss(y, y, epsilon, niter, mass_y, mass_y)
     return 2 * Wxy - Wxx - Wyy
+
 
 def sinkhorn_loss(x, y, epsilon, niter, mass_x=None, mass_y=None):
     """
@@ -37,7 +37,7 @@ def sinkhorn_loss(x, y, epsilon, niter, mass_x=None, mass_y=None):
     if mass_x is None:
         # assign marginal to fixed with equal weights
         mu = 1. / nx * torch.ones([batch_size, nx]).to(device)
-    else: # normalize
+    else:  # normalize
         mass_x.data = torch.clamp(mass_x.data, min=0, max=1e9)
         mass_x = mass_x + 1e-9
         mu = (mass_x / mass_x.sum(dim=-1, keepdim=True)).to(device)
@@ -45,7 +45,7 @@ def sinkhorn_loss(x, y, epsilon, niter, mass_x=None, mass_y=None):
     if mass_y is None:
         # assign marginal to fixed with equal weights
         nu = 1. / ny * torch.ones([batch_size, ny]).to(device)
-    else: # normalize
+    else:  # normalize
         mass_y.data = torch.clamp(mass_y.data, min=0, max=1e9)
         mass_y = mass_y + 1e-9
         nu = (mass_y / mass_y.sum(dim=-1, keepdim=True)).to(device)
@@ -59,7 +59,7 @@ def sinkhorn_loss(x, y, epsilon, niter, mass_x=None, mass_y=None):
         "log-sum-exp"
         return torch.log(torch.exp(A).sum(2, keepdim=True) + 1e-6)  # add 10^-6 to prevent NaN
 
-    # Actual Sinkhorn loop ......................................................................
+    # Actual Sinkhorn loop
     u, v, err = 0. * mu, 0. * nu, 0.
 
     for i in range(niter):

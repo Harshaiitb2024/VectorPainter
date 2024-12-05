@@ -1,28 +1,26 @@
 import copy
 import shutil
 import time
-from functools import partial
 from pathlib import Path
 
 import diffusers
-import numpy as np
+from diffusers import StableDiffusionXLPipeline
+from tqdm.auto import tqdm
 import torch
 import torch.nn.functional as F
-from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
-from diffusers.utils import load_image
-from moviepy import VideoFileClip
-from PIL import Image
-from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline, model2res
-from vectorpainter.libs.engine import ModelState
-from vectorpainter.libs.metric.clip_score import CLIPScoreWrapper
-from vectorpainter.libs.metric.lpips_origin import LPIPS
-from vectorpainter.painter import (Painter, SketchPainterOptimizer, inversion, sa_handler,
-                                   SinkhornLoss, get_relative_pos, bezier_curve_loss)
-from vectorpainter.painter.sketch_utils import fix_image_scale
-from vectorpainter.token2attn.ptp_utils import view_images
-from vectorpainter.utils.plot import plot_couple, plot_img
 from torchvision import transforms
-from tqdm.auto import tqdm
+from torchvision.utils import save_image
+from PIL import Image
+
+from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline
+from vectorpainter.libs.engine import ModelState
+from vectorpainter.painter import Painter, SketchPainterOptimizer, inversion, SinkhornLoss, \
+    get_relative_pos, bezier_curve_loss
+from vectorpainter.painter.sketch_utils import fix_image_scale
+from vectorpainter.utils.plot import plot_couple, plot_img
+from vectorpainter.utils import mkdirs, create_video
+
+Tensor = torch.Tensor
 
 
 class VectorPainterPipeline(ModelState):
@@ -32,110 +30,79 @@ class VectorPainterPipeline(ModelState):
                   f"-{time.strftime('%Y-%m-%d-%H-%M', time.localtime(time.time()))}"
         super().__init__(args, log_path_suffix=logdir_)
 
-        self.result_path.mkdir(parents=True, exist_ok=True)
-        self.print(f"results path: {self.result_path}")
+        self.imit_cfg = self.x_cfg.imit_stage
+        self.synt_cfg = self.x_cfg.synth_stage
 
         # create log dir
         self.style_dir = self.result_path / "style_image"
         self.sd_sample_dir = self.result_path / "sd_sample"
+        self.imit_png_logs_dir = self.result_path / "imit_png_logs"
+        self.imit_svg_logs_dir = self.result_path / "imit_svg_logs"
         self.png_logs_dir = self.result_path / "png_logs"
         self.svg_logs_dir = self.result_path / "svg_logs"
-        self.log_dir = self.result_path / "configs"
 
-        if self.accelerator.is_main_process:
-            self.style_dir.mkdir(parents=True, exist_ok=True)
-            self.sd_sample_dir.mkdir(parents=True, exist_ok=True)
-            self.png_logs_dir.mkdir(parents=True, exist_ok=True)
-            self.svg_logs_dir.mkdir(parents=True, exist_ok=True)
+        mkdirs([self.result_path, self.style_dir, self.sd_sample_dir,
+                self.imit_png_logs_dir, self.imit_svg_logs_dir,
+                self.png_logs_dir, self.svg_logs_dir])
+        self.print(f"results path: {self.result_path}")
 
         self.make_video = self.args.mv
         if self.make_video:
             self.frame_idx = 0
             self.frame_log_dir = self.result_path / "frame_logs"
-            self.frame_log_dir.mkdir(parents=True, exist_ok=True)
-
-        if self.x_cfg.model_id == "sdxl":
-            custom_pipeline = StableDiffusionXLPipeline
-            # custom_scheduler = diffusers.DPMSolverMultistepScheduler
-            custom_scheduler = diffusers.DDIMScheduler
-            # custom_scheduler = diffusers.EulerDiscreteScheduler
-        else:  # sd21, sd14, sd15
-            custom_pipeline = StableDiffusionPipeline
-            custom_scheduler = diffusers.DDIMScheduler
-
-        self.diffusion = init_StableDiffusion_pipeline(
-            self.x_cfg.model_id,
-            custom_pipeline=custom_pipeline,
-            custom_scheduler=custom_scheduler,
-            device=self.device,
-            local_files_only=not args.diffuser.download,
-            force_download=args.diffuser.force_download,
-            resume_download=args.diffuser.resume_download,
-            ldm_speed_up=self.x_cfg.ldm_speed_up,
-            enable_xformers=self.x_cfg.enable_xformers,
-            gradient_checkpoint=self.x_cfg.gradient_checkpoint,
-        )
+            mkdirs([self.frame_log_dir])
 
         self.g_device = torch.Generator(device=self.device).manual_seed(args.seed)
 
-        # init clip model and clip score wrapper
-        self.cargs = self.x_cfg.clip
-        self.clip_score_fn = CLIPScoreWrapper(
-            self.cargs.model_name,
-            device=self.device,
-            visual_score=True,
-            feats_loss_type=self.cargs.feats_loss_type,
-            feats_loss_weights=self.cargs.feats_loss_weights,
-            fc_loss_weight=self.cargs.fc_loss_weight
-        )
+    def painterly_rendering(self, text_prompt, negative_prompt, style_fpath, style_prompt):
+        self.print(f"text prompt: {text_prompt}")
+        self.print(f"negative prompt: {negative_prompt}")
 
-    def painterly_rendering(self, text_prompt, style_fpath):
-        self.print(f"start painterly rendering with text prompt: {text_prompt}")
-        content_img = self.diffusion_sampling(text_prompt, style_fpath)
+        style_tensor = self.load_and_process_style_img(style_fpath)
+        plot_img(style_tensor, self.style_dir, fname="style_image_input")
+        self.print(f"style_input shape: {style_tensor.shape}")
 
-        perceptual_loss_fn = None
-        if self.x_cfg.perceptual.content_coeff > 0 or self.x_cfg.perceptual.style_coeff > 0:
-            lpips_loss_fn = LPIPS(net=self.x_cfg.perceptual.lpips_net).to(self.device)
-            perceptual_loss_fn = partial(lpips_loss_fn.forward, return_per_layer=False, normalize=False)
+        # load and init renderer
+        renderer = self.load_render(style_tensor)
+        img = renderer.init_canvas(random=self.x_cfg.random_init)
+        plot_img(img, self.style_dir, fname="stroke_init_style")
+        renderer.save_svg(self.style_dir.as_posix(), fname="stroke_init_style")
 
-        inputs = self.get_target(
-            content_img,
-            self.x_cfg.image_size,
-            self.x_cfg.fix_scale
-        )
-        inputs = inputs.detach()  # inputs as GT
-        # process style file
-        style_img = self.load_and_process_style_file(style_fpath)
-        plot_img(style_img, self.style_dir, fname="style_image_preprocess")
+        # stage 1
+        renderer, recon_style_fpath = self.brushstroke_imitation(renderer)
+        # stage 2
+        self.synthesis_with_style_supervision(text_prompt, negative_prompt, renderer, style_prompt, recon_style_fpath)
 
-        # load renderer
-        renderer = self.load_render(inputs, style_img)
-        img = renderer.init_image(random=self.x_cfg.random_init)
-        self.print("init_image shape: ", img.shape)
-        plot_img(img, self.style_dir, fname="init_style")
-        renderer.save_svg(self.style_dir.as_posix(), "init_style")
+        # save the painting process as a video
+        if self.make_video:
+            self.print("\n making video...")
+            video_path = self.result_path / "rendering.mp4"
+            create_video(video_path, (self.frame_log_dir / "iter%d.png").as_posix(), self.args.framerate)
 
+        self.close(msg="painterly rendering complete.")
+
+    def brushstroke_imitation(self, renderer: Painter):
         # load optimizer
         optimizer = SketchPainterOptimizer(renderer,
-                                           self.x_cfg.lr,
+                                           self.imit_cfg.lr,
+                                           self.imit_cfg.color_lr,
+                                           self.imit_cfg.width_lr,
                                            self.x_cfg.optim_opacity,
                                            self.x_cfg.optim_rgba,
-                                           self.x_cfg.color_lr,
-                                           self.x_cfg.optim_width,
-                                           self.x_cfg.width_lr)
+                                           self.x_cfg.optim_width)
         optimizer.init_optimizers()
 
-        self.print(f"-> Start stage 1 ...")
-        self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
-        self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
-        self.print(f"-> Painter color Params: {len(renderer.get_color_parameters())}")
+        self.print(f"-> Stoke Imitation Stage ...")
+        self.print(f"-> Painter point params: {len(renderer.get_points_params())}")
+        self.print(f"-> Painter width params: {len(renderer.get_width_parameters())}")
+        self.print(f"-> Painter color params: {len(renderer.get_color_parameters())}")
 
-        total_iter = self.x_cfg.stage_1_num_iter
-        self.print(f"\ntotal optimization steps: {total_iter}")
+        total_iter = self.imit_cfg.num_iter
+        self.print(f"total optimization steps: {total_iter}")
         with tqdm(initial=self.step, total=total_iter, disable=not self.accelerator.is_main_process) as pbar:
             while self.step < total_iter:
-                raster_sketch = renderer.get_image().to(self.device)
-                loss = F.mse_loss(style_img, raster_sketch)
+                raster_sketch = renderer.get_image()
+                loss = F.mse_loss(renderer.style_img, raster_sketch)
 
                 # optimization
                 optimizer.zero_grad_()
@@ -143,8 +110,8 @@ class VectorPainterPipeline(ModelState):
                 optimizer.step_()
 
                 # update lr
-                if self.x_cfg.lr_scheduler:
-                    optimizer.update_lr(self.step, self.x_cfg.decay_steps)
+                if self.imit_cfg.lr_scheduler:
+                    optimizer.update_lr(self.step, self.imit_cfg.decay_steps)
 
                 # records
                 pbar.set_description(
@@ -154,36 +121,129 @@ class VectorPainterPipeline(ModelState):
 
                 # log raster and svg
                 if self.step % self.args.save_step == 0 and self.accelerator.is_main_process:
-                    # log png
-                    plot_couple(style_img,
+                    plot_couple(renderer.style_img,
                                 raster_sketch,
                                 self.step,
-                                output_dir=self.png_logs_dir.as_posix(),
-                                fname=f"iter{self.step}",
-                                prompt=text_prompt)
-                    # log svg
-                    renderer.save_svg(self.svg_logs_dir.as_posix(), f"svg_iter{self.step}")
+                                output_dir=self.imit_png_logs_dir.as_posix(),
+                                fname=f"iter{self.step}")
+                    renderer.save_svg(self.imit_svg_logs_dir.as_posix(), fname=f"svg_iter{self.step}")
 
                 self.step += 1
                 pbar.update(1)
 
         # save style result
         renderer.save_svg(self.result_path.as_posix(), "style_result")
-        style_result = renderer.get_image().to(self.device)
+        style_result = renderer.get_image()
+        recon_style_fpath = self.result_path / 'style_result.png'
         plot_img(style_result, self.result_path, fname='style_result')
+
+        return renderer, recon_style_fpath
+
+    def style_inversion(self, prompt, negative_prompt, style_prompt, init_fpath):
+        init_img = Image.open(init_fpath).convert("RGB").resize((1024, 1024))
+
+        # load pretrained diffusion model
+        ldm_pipe = init_StableDiffusion_pipeline(
+            self.x_cfg.model_id,
+            custom_pipeline=StableDiffusionXLPipeline,
+            custom_scheduler=diffusers.DDIMScheduler,
+            device=self.device,
+            torch_dtype=torch.float16,
+            local_files_only=not self.args.diffuser.download,
+            force_download=self.args.diffuser.force_download,
+            ldm_speed_up=self.x_cfg.ldm_speed_up,
+            enable_xformers=self.x_cfg.enable_xformers,
+            gradient_checkpoint=self.x_cfg.gradient_checkpoint,
+        )
+
+        # ddim inversion
+        x0 = copy.deepcopy(init_img)
+        guidance_scale = 2
+        zts = inversion.ddim_inversion(ldm_pipe, x0, style_prompt, self.x_cfg.num_inference_steps, guidance_scale)
+        # zts: [ddim_steps+1, 4, w, h]
+        zT, inversion_callback = inversion.make_inversion_callback(zts, offset=5)
+        zT = zT.unsqueeze(0)
+
+        # zT = zT / ldm_pipe.vae.config.scaling_factor
+        # decode_zT = ldm_pipe.vae.decode(zT, return_dict=False)[0]
+        # decode_zT = (decode_zT.cpu().detach() / 2 + 0.5).clamp(0, 1)
+        # plot_img(decode_zT.float(), self.sd_sample_dir, fname='decode_zT')
+
+        # instant style
+        scale = {
+            "up": {"block_0": [0.0, 1.0, 0.0]},
+        }
+        ldm_pipe.load_ip_adapter("h94/IP-Adapter",
+                                 subfolder="sdxl_models",
+                                 weight_name="ip-adapter_sdxl.bin",
+                                 local_files_only=not self.args.diffuser.download)
+        ldm_pipe.set_ip_adapter_scale(scale)
+
+        prompts = [style_prompt, prompt, prompt]
+        latents = torch.randn(len(prompts), 4, 128, 128,
+                              device=self.device,
+                              generator=self.g_device,
+                              dtype=ldm_pipe.unet.dtype)
+        latents[0] = zT
+        latents[1] = zT.clone()
+
+        outputs = ldm_pipe(
+            prompt=prompts,
+            negative_prompt=negative_prompt,
+            height=1024,
+            width=1024,
+            ip_adapter_image=init_img,
+            num_inference_steps=self.x_cfg.num_inference_steps,
+            guidance_scale=self.x_cfg.guidance_scale,
+            generator=self.g_device,
+            latents=latents,
+            add_watermarker=False,
+            callback_on_step_end=inversion_callback,
+            output_type='pt',
+            return_dict=False
+        )[0]
+        self.print(outputs.shape)
+
+        gen_file = self.sd_sample_dir / 'samples.png'
+        # view_images([np.array(outputs)], save_image=True, fp=gen_file)
+        save_image(outputs, fp=gen_file)
+        target_file = self.sd_sample_dir / 'target.png'
+        # view_images([np.array(outputs[-1])], save_image=True, fp=target_file)
+        plot_img(outputs[-1], self.sd_sample_dir, fname='target')
+
+        del ldm_pipe
+        torch.cuda.empty_cache()
+
+        target = Image.open(target_file)
+        return target
+
+    def synthesis_with_style_supervision(self, prompt, negative_prompt, renderer: Painter,
+                                         style_prompt, recon_style_fpath: Path):
+        # inversion
+        target = self.style_inversion(prompt, negative_prompt, style_prompt, recon_style_fpath)
+        inputs = self.get_target(target, self.x_cfg.image_size, self.x_cfg.fix_scale)
+        inputs = inputs.detach()  # inputs as GT
 
         # log params
         init_relative_pos = get_relative_pos(renderer.get_points_params()).detach()  # init stroke position as GT
         init_curves = copy.deepcopy(renderer.get_points_params())
-        sinkhorn_loss_fn = SinkhornLoss(device=self.device)
-        # reinit optimizer
+
+        # init optimizer
+        optimizer = SketchPainterOptimizer(renderer,
+                                           self.synt_cfg.lr,
+                                           self.synt_cfg.color_lr,
+                                           self.synt_cfg.width_lr,
+                                           self.x_cfg.optim_opacity,
+                                           self.x_cfg.optim_rgba,
+                                           self.x_cfg.optim_width)
         optimizer.init_optimizers()
 
-        self.print(f"\n-> Start stage 2 ...")
+        self.print(f"\n-> Synthesis with Style Supervision ...")
         self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
         self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
         self.print(f"-> Painter color Params: {len(renderer.get_color_parameters())}")
 
+        # init structure loss
         if self.x_cfg.struct_loss_weight > 0:
             if self.x_cfg.struct_loss == 'ssim':
                 from vectorpainter.painter import SSIM
@@ -193,20 +253,23 @@ class VectorPainterPipeline(ModelState):
                 l_struct_fn = MSSSIM()
             else:
                 l_struct_fn = lambda x, y: torch.tensor(0.)  # zero loss
+        # init shape loss
+        sinkhorn_loss_fn = SinkhornLoss(device=self.device)
 
-        total_iter = self.x_cfg.num_iter
-        self.print(f"\ntotal optimization steps: {total_iter}")
+        self.step = 0
+        total_iter = self.synt_cfg.num_iter
+        self.print(f"total optimization steps: {total_iter}")
         with tqdm(initial=self.step, total=total_iter, disable=not self.accelerator.is_main_process) as pbar:
             while self.step < total_iter:
-                raster_sketch = renderer.get_image().to(self.device)
+                raster_sketch = renderer.get_image()
 
                 if self.make_video and (self.step % self.args.framefreq == 0 or self.step == total_iter - 1):
                     plot_img(raster_sketch, self.frame_log_dir, fname=f"iter{self.frame_idx}")
                     self.frame_idx += 1
 
-                l2_loss = torch.tensor(0.)
+                l_recon = torch.tensor(0.)
                 if self.x_cfg.l2_loss > 0:
-                    l2_loss = F.mse_loss(raster_sketch, inputs) * self.x_cfg.l2_loss
+                    l_recon = F.mse_loss(raster_sketch, inputs) * self.x_cfg.l2_loss
 
                 # Struct Loss
                 l_struct = torch.tensor(0.)
@@ -215,38 +278,6 @@ class VectorPainterPipeline(ModelState):
                         l_struct = 1. - l_struct_fn(raster_sketch, inputs)
                     else:
                         l_struct = l_struct_fn(raster_sketch, inputs)
-
-                # # CLIP data augmentation
-                # raster_sketch_aug, inputs_aug = self.clip_pair_augment(
-                #     raster_sketch, inputs,
-                #     im_res=224,
-                #     augments=self.cargs.augmentations,
-                #     num_aug=self.cargs.num_aug
-                # )
-
-                # # clip visual loss
-                # total_visual_loss = torch.tensor(0.)
-                # l_clip_fc, l_clip_conv, clip_conv_loss_sum = torch.tensor(0), [], torch.tensor(0)
-                # if self.x_cfg.clip.vis_loss > 0:
-                #     l_clip_fc, l_clip_conv = self.clip_score_fn.compute_visual_distance(
-                #         raster_sketch_aug, inputs_aug, clip_norm=False
-                #     )
-                #     clip_conv_loss_sum = sum(l_clip_conv)
-                #     total_visual_loss = self.x_cfg.clip.vis_loss * (clip_conv_loss_sum + l_clip_fc)
-
-                # # text-visual loss
-                # l_tvd = torch.tensor(0.)
-                # if self.cargs.text_visual_coeff > 0:
-                #     l_tvd = self.clip_score_fn.compute_text_visual_distance(
-                #         raster_sketch_aug, text_prompt
-                #     ) * self.cargs.text_visual_coeff
-
-                # # perceptual loss with style image
-                # l_percep_style = torch.tensor(0.)
-                # if self.step > self.x_cfg.perceptual.style_warmup:
-                #     if self.x_cfg.perceptual.style_coeff > 0:
-                #         l_perceptual = perceptual_loss_fn(style_img, raster_sketch).mean()
-                #         l_percep_style = l_perceptual * self.x_cfg.perceptual.style_coeff
 
                 # # prep with inputs
                 # l_percep_content = torch.tensor(0.)
@@ -258,17 +289,16 @@ class VectorPainterPipeline(ModelState):
                 l_rel_pos = torch.tensor(0.)
                 if self.x_cfg.pos_loss_weight > 0:
                     if self.x_cfg.pos_type == 'pos':
-                        l_rel_pos = F.mse_loss(
-                            get_relative_pos(renderer.get_points_params()), init_relative_pos
-                        ).mean() * self.x_cfg.pos_loss_weight
+                        l_rel_pos = F.mse_loss(get_relative_pos(renderer.get_points_params()),
+                                               init_relative_pos) * self.x_cfg.pos_loss_weight
                     elif self.x_cfg.pos_type == 'bez':
-                        l_rel_pos = bezier_curve_loss(renderer.get_points_params(), init_curves) * self.x_cfg.pos_loss_weight
+                        l_rel_pos = bezier_curve_loss(renderer.get_points_params(),
+                                                      init_curves) * self.x_cfg.pos_loss_weight
                     elif self.x_cfg.pos_type == 'sinkhorn':
-                        l_rel_pos = sinkhorn_loss_fn(raster_sketch, style_img) * self.x_cfg.pos_loss_weight
+                        l_rel_pos = sinkhorn_loss_fn(raster_sketch, renderer.style_img) * self.x_cfg.pos_loss_weight
 
                 # total loss
-                # loss = total_visual_loss + l_tvd + l_percep_style + l_percep_content + l_rel_pos
-                loss = l2_loss + l_struct + l_rel_pos
+                loss = l_recon + l_struct + l_rel_pos
 
                 # optimization
                 optimizer.zero_grad_()
@@ -276,14 +306,16 @@ class VectorPainterPipeline(ModelState):
                 optimizer.step_()
 
                 # update lr
-                if self.x_cfg.lr_scheduler:
-                    optimizer.update_lr(self.step, self.x_cfg.decay_steps)
+                if self.synt_cfg.lr_scheduler:
+                    optimizer.update_lr(self.step, self.synt_cfg.decay_steps)
 
                 # records
                 pbar.set_description(
                     f"lr: {optimizer.get_lr():.2f}, "
-                    f"l_pos: {l_rel_pos.item():.4f}, "
-                    f"l_total: {loss.item():.4f}"
+                    f"l_total: {loss.item():.4f}, "
+                    f"l_recon: {l_recon.item():.4f}, "
+                    f"l_struct: {l_struct.item():.4f}, "
+                    f"l_pos: {l_rel_pos.item():.4f}"
                 )
 
                 # log raster and svg
@@ -294,130 +326,39 @@ class VectorPainterPipeline(ModelState):
                                 self.step,
                                 output_dir=self.png_logs_dir.as_posix(),
                                 fname=f"iter{self.step}",
-                                prompt=text_prompt)
+                                prompt=prompt)
                     # log svg
-                    renderer.save_svg(self.svg_logs_dir.as_posix(), f"svg_iter{self.step}")
+                    renderer.save_svg(self.svg_logs_dir.as_posix(), fname=f"svg_iter{self.step}")
 
                 self.step += 1
                 pbar.update(1)
 
         # saving final result
         renderer.save_svg(self.result_path.as_posix(), "final_svg")
-
         final_raster_sketch = renderer.get_image().to(self.device)
         plot_img(final_raster_sketch, self.result_path, fname='final_render')
 
-        if self.make_video:
-            video_path = self.result_path / "rendering.mp4"
-            from subprocess import call
-            call([
-                "ffmpeg",
-                "-framerate", f"{self.args.framerate}",
-                "-i", (self.frame_log_dir / "iter%d.png").as_posix(),
-                "-vb", "20M",
-                video_path.as_posix()
-            ])
-            video = VideoFileClip(video_path.as_posix())
-            video.write_gif((self.result_path / "rendering.gif").as_posix(), fps=video.fps)
-
-        self.close(msg="painterly rendering complete.")
-
-    @torch.no_grad()
-    def captioning(self, style_fpath):
-        from transformers import Blip2ForConditionalGeneration, Blip2Processor
-        blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-6.7b")
-        blip2_model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-6.7b", load_in_8bit=True, device_map={"": 0},
-            torch_dtype=torch.float16
-        )  # doctest: +IGNORE_RESULT
-        style_img = Image.open(style_fpath).convert("RGB")
-        inputs = blip2_processor(images=style_img, return_tensors="pt").to(torch.float16)
-        generated_ids = blip2_model.generate(**inputs)
-        src_prompt = blip2_processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        self.print(f"src_prompt: {src_prompt}")
-        del blip2_processor, blip2_model
-        torch.cuda.empty_cache()
-        return src_prompt
-
-    def diffusion_sampling(self, prompts, style_fpath):
-        height = width = model2res(self.x_cfg.model_id)
-
-        src_prompt = self.captioning(style_fpath)
-        style_img = Image.open(style_fpath).convert("RGB").resize((height, width))
-        x0 = style_img.copy()
-        zts = inversion.ddim_inversion(self.diffusion, x0, src_prompt, self.x_cfg.num_inference_steps, 2)
-        handler = sa_handler.Handler(self.diffusion)
-        sa_args = sa_handler.StyleAlignedArgs(share_group_norm=True, share_layer_norm=True, share_attention=True,
-                                              adain_queries=True, adain_keys=True, adain_values=False,
-                                              shared_score_shift=np.log(2), shared_score_scale=1.0)
-
-        handler.register(sa_args)
-        zT, inversion_callback = inversion.make_inversion_callback(zts, offset=5)
-
-        prompts = [src_prompt, prompts]
-        latents = torch.randn(len(prompts), 4, 128, 128, device=self.device, generator=self.g_device,
-                              dtype=self.diffusion.unet.dtype).to(self.device)
-        latents[0] = zT
-
-        scale = {
-            "up": {"block_0": [0.0, 1.0, 0.0]},
-        }
-        self.diffusion.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
-        self.diffusion.enable_vae_tiling()
-        self.diffusion.set_ip_adapter_scale(scale)
-
-        outputs = self.diffusion(
-            prompt=prompts,
-            negative_prompt=self.args.neg_prompt,
-            height=height,
-            width=width,
-            ip_adapter_image=style_img,
-            num_inference_steps=self.x_cfg.num_inference_steps,
-            guidance_scale=self.x_cfg.guidance_scale,
-            generator=self.g_device,
-            latents=latents,
-            callback_on_step_end=inversion_callback,
-        ).images
-        target_file = self.sd_sample_dir / 'sample.png'
-        view_images([np.array(outputs[-1])], save_image=True, fp=target_file)
-        target = Image.open(target_file)
-
-        timesteps_ = self.diffusion.scheduler.timesteps.cpu().numpy().tolist()
-        self.print(f"{len(timesteps_)} denoising steps, {timesteps_}")
-
-        del self.diffusion
-        torch.cuda.empty_cache()
-
-        return target
-
-    def load_and_process_style_file(self, style_fpath):
+    def load_and_process_style_img(self, style_fpath):
         style_path = Path(style_fpath)
         assert style_path.exists(), f"{style_fpath} is not exist!"
-        # load style file
-        style_img = self.style_file_preprocess(style_path.as_posix())
+
+        def _to_tensor(style_path):
+            process_comp = transforms.Compose([
+                transforms.Resize(size=(self.x_cfg.image_size, self.x_cfg.image_size)),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.unsqueeze(0)),
+            ])
+
+            style_pil = Image.open(style_path).convert("RGB")  # open file
+            style_tensor = process_comp(style_pil).to(self.device)  # preprocess
+            return style_tensor
+
+        style_img = _to_tensor(style_path.as_posix())
         self.print(f"load style file from: {style_path.as_posix()}")
         shutil.copy(style_path, self.style_dir)  # copy style file
         return style_img
 
-    def style_file_preprocess(self, style_path):
-        process_comp = transforms.Compose([
-            transforms.Resize(size=(self.x_cfg.image_size, self.x_cfg.image_size)),
-            transforms.ToTensor(),
-            # transforms.Lambda(lambda t: t - 0.5),
-            transforms.Lambda(lambda t: t.unsqueeze(0)),
-            # transforms.Lambda(lambda t: (t + 1) / 2),
-        ])
-
-        style_pil = Image.open(style_path).convert("RGB")  # open file
-        style_file = process_comp(style_pil)  # preprocess
-        style_file = style_file.to(self.device)
-        return style_file
-
-    def get_target(self,
-                   target,
-                   image_size,
-                   fix_scale):
-
+    def get_target(self, target, image_size, fix_scale):
         if target.mode == "RGBA":
             # Create a white rgba background
             new_image = Image.new("RGBA", target.size, "WHITE")
@@ -444,11 +385,10 @@ class VectorPainterPipeline(ModelState):
 
         return target_
 
-    def load_render(self, content_img, style_img):
+    def load_render(self, style_img):
         renderer = Painter(
             self.x_cfg,
             self.args.diffvg,
-            content_img=content_img,
             style_img=style_img,
             style_dir=self.style_dir,
             num_strokes=self.x_cfg.num_paths,
@@ -457,37 +397,3 @@ class VectorPainterPipeline(ModelState):
             device=self.device
         )
         return renderer
-
-    @property
-    def clip_norm_(self):
-        return transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
-
-    def clip_pair_augment(self,
-                          x: torch.Tensor,
-                          y: torch.Tensor,
-                          im_res: int,
-                          augments: str = "affine_norm",
-                          num_aug: int = 4):
-        # init augmentations
-        augment_list = []
-        if "affine" in augments:
-            augment_list.append(
-                transforms.RandomPerspective(fill=0, p=1.0, distortion_scale=0.5)
-            )
-            augment_list.append(
-                transforms.RandomResizedCrop(im_res, scale=(0.8, 0.8), ratio=(1.0, 1.0))
-            )
-        augment_list.append(self.clip_norm_)  # CLIP Normalize
-
-        # compose augmentations
-        augment_compose = transforms.Compose(augment_list)
-        # make augmentation pairs
-        x_augs, y_augs = [self.clip_score_fn.normalize(x)], [self.clip_score_fn.normalize(y)]
-        # repeat N times
-        for n in range(num_aug):
-            augmented_pair = augment_compose(torch.cat([x, y]))
-            x_augs.append(augmented_pair[0].unsqueeze(0))
-            y_augs.append(augmented_pair[1].unsqueeze(0))
-        xs = torch.cat(x_augs, dim=0)
-        ys = torch.cat(y_augs, dim=0)
-        return xs, ys

@@ -1,6 +1,19 @@
 # VectorPainter
 
-## 🔥Quickstart
+### 🔥Quickstart
+
+- Starry
+
+```shell
+CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A photo of Sydney opera house'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/Starry/sydney_starry' seed=666
+CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/Starry/mountain' seed=666
+```
+
+- BrushStroke Painting
+
+```shell
+CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/BrushStrokePainting-1.jpeg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/Starry/brush_mountain' seed=666
+```
 
 ### Starry
 
@@ -10,7 +23,6 @@ CUDA_VISIBLE_DEVICES=2 python vectorpainter.py "prompt='A photo of Sydney opera 
 CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke prompt='A painting of a cat.' target="./assets/starry.jpg" result_path='./workspace/Starry/cat_starry' seed=100
 CUDA_VISIBLE_DEVICES=6 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" target="./assets/starry.jpg" result_path='./workspace/Starry/mountain_starry'
 CUDA_VISIBLE_DEVICES=5 python vectorpainter.py x=stroke "prompt='A dragon-cat hybrid.'" target="./assets/starry.jpg" result_path='./workspace/Starry/dragon_cat_starry'
-
 ```
 
 ### Sunflowers
@@ -59,4 +71,10 @@ CUDA_VISIBLE_DEVICES=6 python vectorpainter.py "prompt='The Great Pyramid.'" x=s
 CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='A Torii Gate.'" x=stroke target="./assets/majeur.jpg" result_path='./workspace/majeur/torii_majeur'
 CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='The Great Wall.'" x=stroke target="./assets/majeur.jpg" result_path='./workspace/majeur/wall_majeur'
 CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='The Eiffel Tower.'" x=stroke target="./assets/majeur.jpg" result_path='./workspace/majeur/eiffel_majeur' seed=101
+```
+
+### BrushStroke Painting
+
+```shell
+python strokestyle.py "prompt='a photo of Sydney opera house.'" x=stroke target="./assets/BrushStrokePainting-1.jpeg" result_path='./workdir/Painting/BrushStroke-1'
 ```

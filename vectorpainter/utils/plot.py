@@ -3,9 +3,8 @@
 # Copyright (c) 2023, XiMing Xing.
 # License: MPL-2.0 License
 
-from typing import AnyStr, BinaryIO, Union
+from typing import AnyStr
 from PIL import Image
-import pathlib
 
 import numpy as np
 import matplotlib.pyplot as plt

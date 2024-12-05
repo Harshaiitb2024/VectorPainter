@@ -40,7 +40,7 @@ class StyleAlignedArgs:
     only_self_level: float = 0.
 
 
-def expand_first(feat: T, scale=1.,) -> T:
+def expand_first(feat: T, scale=1., ) -> T:
     b = feat.shape[0]
     feat_style = torch.stack((feat[0], feat[b // 2])).unsqueeze(1)
     if scale == 1:
@@ -84,7 +84,8 @@ class DefaultAttentionProcessor(nn.Module):
 
 class SharedAttentionProcessor(DefaultAttentionProcessor):
 
-    def shifted_scaled_dot_product_attention(self, attn: attention_processor.Attention, query: T, key: T, value: T) -> T:
+    def shifted_scaled_dot_product_attention(self, attn: attention_processor.Attention,
+                                             query: T, key: T, value: T) -> T:
         logits = torch.einsum('bhqd,bhkd->bhqk', query, key) * attn.scale
         logits[:, :, :, query.shape[2]:] += self.shared_score_shift
         probs = logits.softmax(-1)
@@ -126,6 +127,7 @@ class SharedAttentionProcessor(DefaultAttentionProcessor):
         query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
         value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+
         # if self.step >= self.start_inject:
         if self.adain_queries:
             query = adain(query)
@@ -133,11 +135,12 @@ class SharedAttentionProcessor(DefaultAttentionProcessor):
             key = adain(key)
         if self.adain_values:
             value = adain(value)
+
         if self.share_attention:
             key = concat_first(key, -2, scale=self.shared_score_scale)
             value = concat_first(value, -2)
             if self.shared_score_shift != 0:
-                hidden_states = self.shifted_scaled_dot_product_attention(attn, query, key, value,)
+                hidden_states = self.shifted_scaled_dot_product_attention(attn, query, key, value, )
             else:
                 hidden_states = nnf.scaled_dot_product_attention(
                     query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
@@ -146,6 +149,7 @@ class SharedAttentionProcessor(DefaultAttentionProcessor):
             hidden_states = nnf.scaled_dot_product_attention(
                 query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
             )
+
         # hidden_states = adain(hidden_states)
         hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
         hidden_states = hidden_states.to(query.dtype)
@@ -210,10 +214,12 @@ def init_attention_processors(pipeline: StableDiffusionXLPipeline, style_aligned
     unet = pipeline.unet
     number_of_self, number_of_cross = 0, 0
     num_self_layers = len([name for name in unet.attn_processors.keys() if 'attn1' in name])
+
     if style_aligned_args is None:
         only_self_vec = _get_switch_vec(num_self_layers, 1)
     else:
         only_self_vec = _get_switch_vec(num_self_layers, style_aligned_args.only_self_level)
+
     for i, name in enumerate(unet.attn_processors.keys()):
         is_self_attention = 'attn1' in name
         if is_self_attention:

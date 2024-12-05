@@ -8,8 +8,7 @@ from collections import OrderedDict
 from packaging import version
 
 import torch
-from diffusers import StableDiffusionPipeline, SchedulerMixin
-from diffusers import UNet2DConditionModel
+from diffusers import StableDiffusionXLPipeline, SchedulerMixin, UNet2DConditionModel, AutoencoderKL
 from diffusers.utils import is_torch_version, is_xformers_available
 
 DiffusersModels = OrderedDict({
@@ -35,20 +34,19 @@ def model2res(model_id: str):
 
 
 def init_StableDiffusion_pipeline(model_id: AnyStr,
-                                  custom_pipeline: StableDiffusionPipeline,
+                                  custom_pipeline: StableDiffusionXLPipeline,
                                   custom_scheduler: SchedulerMixin = None,
                                   device: torch.device = "cuda",
                                   torch_dtype: torch.dtype = torch.float32,
                                   local_files_only: bool = True,
                                   force_download: bool = False,
-                                  resume_download: bool = False,
                                   ldm_speed_up: bool = False,
                                   enable_xformers: bool = True,
                                   gradient_checkpoint: bool = False,
                                   cpu_offload: bool = False,
                                   vae_slicing: bool = False,
                                   lora_path: AnyStr = None,
-                                  unet_path: AnyStr = None) -> StableDiffusionPipeline:
+                                  unet_path: AnyStr = None) -> StableDiffusionXLPipeline:
     """
     A tool for initial diffusers pipeline.
 
@@ -78,17 +76,20 @@ def init_StableDiffusion_pipeline(model_id: AnyStr,
 
     # process diffusion model
     if custom_scheduler is not None:
+        vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix",
+                                            torch_dtype=torch.float16,
+                                            local_files_only=local_files_only)
+        print(f"load {'madebyollin/sdxl-vae-fp16-fix'}")
         pipeline = custom_pipeline.from_pretrained(
             model_id,
             torch_dtype=torch_dtype,
+            vae=vae,
             local_files_only=local_files_only,
             force_download=force_download,
-            resume_download=resume_download,
             scheduler=custom_scheduler.from_pretrained(model_id,
                                                        subfolder="scheduler",
                                                        local_files_only=local_files_only,
-                                                       force_download=force_download,
-                                                       resume_download=resume_download)
+                                                       force_download=force_download)
         ).to(device)
     else:
         pipeline = custom_pipeline.from_pretrained(
@@ -96,7 +97,6 @@ def init_StableDiffusion_pipeline(model_id: AnyStr,
             torch_dtype=torch_dtype,
             local_files_only=local_files_only,
             force_download=force_download,
-            resume_download=resume_download,
         ).to(device)
 
     print(f"load diffusers pipeline: {model_id}")

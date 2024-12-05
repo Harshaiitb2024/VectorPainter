@@ -3,17 +3,19 @@
 # Author: XiMing Xing
 # Description:
 
-import numpy as np
-import omegaconf
 import pathlib
-import pydiffvg
 import random
+
+import omegaconf
+from tqdm.auto import trange
 import torch
 from scipy.spatial import ConvexHull
 from skimage.segmentation import mark_boundaries, slic
+import numpy as np
+import pydiffvg
+
 from vectorpainter.diffvg_warp import DiffVGState
 from vectorpainter.token2attn.ptp_utils import view_images
-from tqdm import trange
 
 
 class Painter(DiffVGState):
@@ -22,8 +24,7 @@ class Painter(DiffVGState):
             self,
             cfg: omegaconf.DictConfig,
             diffvg_cfg: omegaconf.DictConfig,
-            content_img,
-            style_img,
+            style_img: torch.Tensor,
             style_dir,
             num_strokes=4,
             num_segments=4,
@@ -32,7 +33,6 @@ class Painter(DiffVGState):
     ):
         super(Painter, self).__init__(device, print_timing=diffvg_cfg.print_timing,
                                       canvas_width=canvas_size, canvas_height=canvas_size)
-        self.content_img = content_img
         self.style_img = style_img
         self.style_dir = style_dir
 
@@ -46,7 +46,6 @@ class Painter(DiffVGState):
         self.control_points_per_seg = cfg.control_points_per_seg
         self.optim_rgba = cfg.optim_rgba
         self.optim_alpha = cfg.optim_opacity
-        self.num_stages = cfg.num_stages
 
         self.shapes = []
         self.shape_groups = []
@@ -59,9 +58,9 @@ class Painter(DiffVGState):
 
         self.strokes_counter = 0  # counts the number of calls to "get_path"
 
-    def init_image(self, random=False):
+    def init_canvas(self, random=False):
         if not random:
-            # style_img (1, 3, M, N) -> (M, N, 3)
+            # style_img (1, 3, w, h) -> (w, h, 3)
             style_img = self.style_img.squeeze(0).permute(1, 2, 0).cpu().numpy()
             # brush stroke init
             segments = self.segment_style(style_img, self.num_paths)
@@ -311,26 +310,26 @@ class SketchPainterOptimizer:
     def __init__(
             self,
             renderer: Painter,
-            points_lr: float,
+            point_lr: float,
+            color_lr: float,
+            width_lr: float,
             optim_alpha: bool,
             optim_rgba: bool,
-            color_lr: float,
-            optim_width: bool,
-            width_lr: float
+            optim_width: bool
     ):
         self.renderer = renderer
 
-        self.points_lr = points_lr
+        self.point_lr = point_lr
         self.optim_color = optim_alpha or optim_rgba
         self.color_lr = color_lr
         self.optim_width = optim_width
         self.width_lr = width_lr
 
-        self.points_optimizer, self.width_optimizer, self.color_optimizer = None, None, None
+        self.point_optimizer, self.width_optimizer, self.color_optimizer = None, None, None
 
     def init_optimizers(self):
         self.renderer.set_points_parameters()
-        self.points_optimizer = torch.optim.Adam(self.renderer.get_points_params(), lr=self.points_lr)
+        self.point_optimizer = torch.optim.Adam(self.renderer.get_points_params(), lr=self.point_lr)
         if self.optim_color:
             self.renderer.set_color_parameters()
             self.color_optimizer = torch.optim.Adam(self.renderer.get_color_parameters(), lr=self.color_lr)
@@ -340,25 +339,25 @@ class SketchPainterOptimizer:
 
     def update_lr(self, step, decay_steps=(500, 750)):
         if step % decay_steps[0] == 0 and step > 0:
-            for param_group in self.points_optimizer.param_groups:
+            for param_group in self.point_optimizer.param_groups:
                 param_group['lr'] = 0.4
         if step % decay_steps[1] == 0 and step > 0:
-            for param_group in self.points_optimizer.param_groups:
+            for param_group in self.point_optimizer.param_groups:
                 param_group['lr'] = 0.1
 
     def zero_grad_(self):
-        self.points_optimizer.zero_grad()
+        self.point_optimizer.zero_grad()
         if self.optim_color:
             self.color_optimizer.zero_grad()
         if self.optim_width:
             self.width_optimizer.zero_grad()
 
     def step_(self):
-        self.points_optimizer.step()
+        self.point_optimizer.step()
         if self.optim_color:
             self.color_optimizer.step()
         if self.optim_width:
             self.width_optimizer.step()
 
     def get_lr(self):
-        return self.points_optimizer.param_groups[0]['lr']
+        return self.point_optimizer.param_groups[0]['lr']
