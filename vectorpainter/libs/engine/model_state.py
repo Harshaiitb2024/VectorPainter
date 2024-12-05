@@ -8,13 +8,13 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
-from omegaconf import OmegaConf, DictConfig
+import hydra
+from omegaconf import OmegaConf, DictConfig, open_dict
 from pprint import pprint
 import torch
-from accelerate.utils import LoggerType
 from accelerate import Accelerator
 
-from ..utils.logging import get_logger
+from ..utils.logging import build_sysout_print_logger
 
 
 class ModelState:
@@ -40,10 +40,9 @@ class ModelState:
         self.state_cfg = args.state
         self.x_cfg = args.x
 
-        """check valid"""
-        mixed_precision = self.state_cfg.get("mprec")
-        # Bug: omegaconf convert 'no' to false
-        mixed_precision = "no" if type(mixed_precision) == bool else mixed_precision
+        # runtime output directory
+        with open_dict(args):
+            args.output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
 
         """create working space"""
         # rule: ['./config'. 'method_name', 'exp_name.yaml']
@@ -72,9 +71,10 @@ class ModelState:
         #     self.log_with.append(LoggerType.TENSORBOARD)
 
         """HuggingFace Accelerator"""
+        self.dtype = args.state.get("mprec", 'no')
         self.accelerator = Accelerator(
             device_placement=True,
-            mixed_precision=mixed_precision,
+            mixed_precision=self.dtype,
             cpu=True if self.state_cfg.cpu else False,
             log_with=None if len(self.log_with) == 0 else self.log_with,
             project_dir=self.result_path / "vis",
@@ -84,23 +84,21 @@ class ModelState:
         if self.accelerator.is_local_main_process:
             # logging
             self.log = logging.getLogger(__name__)
-
             # log results in a folder periodically
             self.result_path.mkdir(parents=True, exist_ok=True)
-            if not ignore_log:
-                self.logger = get_logger(
-                    logs_dir=self.result_path.as_posix(),
-                    file_name=f"{now_time}-{args.seed}-log.txt"
-                )
+            # system print recorder
+            self.logger = build_sysout_print_logger(logs_dir=self.result_path.as_posix(),
+                                                    file_name=f"stdout-print-log.txt")
 
             print("==> system args: ")
-            sys_cfg = OmegaConf.masked_copy(args, ["x"])
+            custom_cfg = OmegaConf.masked_copy(args, ["x"])
+            sys_cfg = dictconfig_diff(args, custom_cfg)
             print(sys_cfg)
             print("==> yaml config args: ")
             print(self.x_cfg)
 
             print("\n***** Model State *****")
-            print(f"-> Mixed Precision: {mixed_precision}, AMP: {self.accelerator.native_amp}")
+            print(f"-> Mixed Precision: {self.accelerator.state.mixed_precision}")
             print(f"-> Weight dtype:  {self.weight_dtype}")
 
             if self.accelerator.scaler_handler is not None and self.accelerator.scaler_handler.enabled:
@@ -137,33 +135,6 @@ class ModelState:
     @property
     def n_gpus(self):
         return self.accelerator.num_processes
-
-    @property
-    def no_decay_params_names(self):
-        no_decay = [
-            "bn", "LayerNorm", "GroupNorm",
-        ]
-        return no_decay
-
-    def no_decay_params(self, model, weight_decay):
-        """optimization tricks"""
-        optimizer_grouped_parameters = [
-            {
-                "params": [
-                    p for n, p in model.named_parameters()
-                    if not any(nd in n for nd in self.no_decay_params_names)
-                ],
-                "weight_decay": weight_decay,
-            },
-            {
-                "params": [
-                    p for n, p in model.named_parameters()
-                    if any(nd in n for nd in self.no_decay_params_names)
-                ],
-                "weight_decay": 0.0,
-            },
-        ]
-        return optimizer_grouped_parameters
 
     def optimized_params(self, model: torch.nn.Module, verbose=True) -> List:
         """return parameters if `requires_grad` is True
@@ -253,3 +224,27 @@ class ModelState:
         if len(self.log_with) > 0:
             self.close_tracker()
         self.print(msg)
+
+
+def dictconfig_diff(dict1, dict2):
+    """
+    Find the difference between two OmegaConf.DictConfig objects
+    """
+    # Convert OmegaConf.DictConfig to regular dictionaries
+    dict1 = OmegaConf.to_container(dict1, resolve=True)
+    dict2 = OmegaConf.to_container(dict2, resolve=True)
+
+    # Find the keys that are in dict1 but not in dict2
+    diff = {}
+    for key in dict1:
+        if key not in dict2:
+            diff[key] = dict1[key]
+        elif dict1[key] != dict2[key]:
+            if isinstance(dict1[key], dict) and isinstance(dict2[key], dict):
+                nested_diff = dictconfig_diff(dict1[key], dict2[key])
+                if nested_diff:
+                    diff[key] = nested_diff
+            else:
+                diff[key] = dict1[key]
+
+    return diff

@@ -56,3 +56,4 @@ hydra:
 defaults:
   - _self_
   - x: ~
+  - override hydra/job_logging: disabled # Outputs only to stdout (no log file)
