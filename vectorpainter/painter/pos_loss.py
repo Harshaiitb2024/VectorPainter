@@ -15,13 +15,11 @@ class SinkhornLoss(nn.Module):
         self.device = device
 
     def _mesh_grids(self, batch_size, h, w):
-
         a = torch.linspace(0.0, h - 1.0, h).to(self.device)
         b = torch.linspace(0.0, w - 1.0, w).to(self.device)
         y_grid = a.view(-1, 1).repeat(batch_size, 1, w) / h
         x_grid = b.view(1, -1).repeat(batch_size, h, 1) / w
-        grids = torch.cat([y_grid.view(batch_size, -1, 1),
-                          x_grid.view(batch_size, -1, 1)], dim=-1)
+        grids = torch.cat([y_grid.view(batch_size, -1, 1), x_grid.view(batch_size, -1, 1)], dim=-1)
         return grids
 
     def forward(self, canvas, gt):
@@ -33,7 +31,7 @@ class SinkhornLoss(nn.Module):
             batch_size, c, h, w = gt.shape
 
         canvas_grids = self._mesh_grids(batch_size, h, w)
-        gt_grids = torch.clone(canvas_grids)
+        gt_grids = canvas_grids.clone()
 
         # randomly select a color channel, to speedup and consume memory
         i = random.randint(0, 2)
@@ -43,6 +41,7 @@ class SinkhornLoss(nn.Module):
 
         mass_x = img_1.reshape(batch_size, -1)
         mass_y = img_2.reshape(batch_size, -1)
+
         if self.normalize:
             loss = spc.sinkhorn_normalized(
                 canvas_grids, gt_grids, epsilon=self.epsilon, niter=self.niter,

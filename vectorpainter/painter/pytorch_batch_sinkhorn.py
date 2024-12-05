@@ -7,10 +7,6 @@ Discrete OT : Sinkhorn algorithm for point cloud marginals.
 """
 
 import torch
-from torch.autograd import Variable
-
-# Decide which device we want to run on
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def sinkhorn_normalized(x, y, epsilon, niter, mass_x=None, mass_y=None):
@@ -26,6 +22,7 @@ def sinkhorn_loss(x, y, epsilon, niter, mass_x=None, mass_y=None):
     outputs an approximation of the OT cost with regularization parameter epsilon
     niter is the max. number of steps in sinkhorn loop
     """
+    device = x.device
 
     # The Sinkhorn algorithm takes as input three variables :
     C = cost_matrix(x, y)  # Wasserstein cost function
