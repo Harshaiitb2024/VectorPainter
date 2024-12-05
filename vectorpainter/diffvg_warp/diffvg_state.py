@@ -51,12 +51,12 @@ class DiffVGState(torch.nn.Module):
     def clip_curve_shape(self, *args, **kwargs):
         # raise NotImplementedError
         for path in self.shapes:
-            path.points.data *= 4
             path.stroke_width.data.clamp_(1.0, 50)
-            path.stroke_width.data *= 4
         for group in self.shape_groups:
-            group.stroke_color.data.clamp_(0.0, 1.0)
-            group.stroke_color.data[-1].clamp_(1.0, 1.0)  # force full opacity
+            if group.stroke_color is not None:
+                group.stroke_color.data.clamp_(0.0, 1.0)
+            if group.fill_color is not None:
+                group.fill_color.data.clamp_(0.0, 1.0)  # clip rgba
 
     def render_warp(self, seed=0):
         self.clip_curve_shape()
@@ -74,36 +74,34 @@ class DiffVGState(torch.nn.Module):
                       *scene_args)
         return img
 
-    def render_image(self, canvas_width, canvas_height, shapes, shape_groups, seed: int = 0):
+    def render_image(self, seed: int = 0):
+        self.clip_curve_shape()
         scene_args = pydiffvg.RenderFunction.serialize_scene(
-            canvas_width, canvas_height, shapes, shape_groups
+            self.canvas_width, self.canvas_height, self.shapes, self.shape_groups
         )
         _render = pydiffvg.RenderFunction.apply
-        img = _render(canvas_width,  # width
-                      canvas_height,  # height
+        img = _render(self.canvas_width,  # width
+                      self.canvas_height,  # height
                       2,  # num_samples_x
                       2,  # num_samples_y
                       seed,  # seed
                       None,
                       *scene_args)
-        img = img[:, :, 3:4] * img[:, :, :3] + self.para_bg * (1 - img[:, :, 3:4])
+        img = img[:, :, 3:4] * img[:, :, :3] + \
+              torch.ones(img.shape[0], img.shape[1], 3, device=self.device) * (1 - img[:, :, 3:4])
+        img = img[:, :, :3]
         img = img.unsqueeze(0)  # convert img from HWC to NCHW
         img = img.permute(0, 3, 1, 2).to(self.device)  # NHWC -> NCHW
         return img
 
-    @staticmethod
-    def load_svg(path_svg):
-        canvas_width, canvas_height, shapes, shape_groups = pydiffvg.svg_to_scene(path_svg)
-        return canvas_width, canvas_height, shapes, shape_groups
+    def load_svg(self, path_svg):
+        self.canvas_width, self.canvas_height, self.shapes, self.shape_groups = pydiffvg.svg_to_scene(path_svg)
 
     def save_svg(self,
                  filename: Union[AnyStr, pathlib.Path],
-                 width: int = None,
-                 height: int = None,
-                 shapes: List = None,
-                 shape_groups: List = None,
                  use_gamma: bool = False,
                  background: str = None):
+        self.clip_curve_shape()
         """
         Save an SVG file with specified parameters and shapes.
         Noting: New version of SVG saving function that is an adaptation of pydiffvg.save_svg.
@@ -121,6 +119,11 @@ class DiffVGState(torch.nn.Module):
         Returns:
             None
         """
+        width = self.canvas_width
+        height = self.canvas_height
+        shapes = self.shapes
+        shape_groups = self.shape_groups
+
         root = etree.Element('svg')
         root.set('version', '1.1')
         root.set('xmlns', 'http://www.w3.org/2000/svg')
