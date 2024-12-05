@@ -5,3 +5,4 @@
 # License: MPL-2.0 License
 
 from .misc import *
+from .plot import view_images
