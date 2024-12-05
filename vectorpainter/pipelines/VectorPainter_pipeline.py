@@ -12,7 +12,7 @@ from torchvision import transforms
 from torchvision.utils import save_image
 from PIL import Image
 
-from vectorpainter.diffusers_warp import init_StableDiffusion_pipeline
+from vectorpainter.diffusers_warp import init_sdxl_pipeline
 from vectorpainter.libs.engine import ModelState
 from vectorpainter.painter import Painter, SketchPainterOptimizer, inversion, SinkhornLoss, \
     get_relative_pos, bezier_curve_loss
@@ -143,12 +143,11 @@ class VectorPainterPipeline(ModelState):
         init_img = Image.open(init_fpath).convert("RGB").resize((1024, 1024))
 
         # load pretrained diffusion model
-        ldm_pipe = init_StableDiffusion_pipeline(
-            self.x_cfg.model_id,
-            custom_pipeline=StableDiffusionXLPipeline,
-            custom_scheduler=diffusers.DDIMScheduler,
+        ldm_pipe = init_sdxl_pipeline(
+            scheduler='ddim',
             device=self.device,
             torch_dtype=torch.float16,
+            variant="fp16",
             local_files_only=not self.args.diffuser.download,
             force_download=self.args.diffuser.force_download,
             ldm_speed_up=self.x_cfg.ldm_speed_up,
@@ -253,6 +252,7 @@ class VectorPainterPipeline(ModelState):
                 l_struct_fn = MSSSIM()
             else:
                 l_struct_fn = lambda x, y: torch.tensor(0.)  # zero loss
+
         # init shape loss
         sinkhorn_loss_fn = SinkhornLoss(device=self.device)
 
@@ -267,11 +267,12 @@ class VectorPainterPipeline(ModelState):
                     plot_img(raster_sketch, self.frame_log_dir, fname=f"iter{self.frame_idx}")
                     self.frame_idx += 1
 
+                # recon loss
                 l_recon = torch.tensor(0.)
                 if self.x_cfg.l2_loss > 0:
                     l_recon = F.mse_loss(raster_sketch, inputs) * self.x_cfg.l2_loss
 
-                # Struct Loss
+                # struct Loss
                 l_struct = torch.tensor(0.)
                 if self.x_cfg.struct_loss_weight > 0:
                     if self.x_cfg.struct_loss in ['ssim', 'msssim']:
@@ -279,13 +280,13 @@ class VectorPainterPipeline(ModelState):
                     else:
                         l_struct = l_struct_fn(raster_sketch, inputs)
 
-                # # prep with inputs
+                # perceptual loss
                 # l_percep_content = torch.tensor(0.)
                 # if self.x_cfg.perceptual.content_coeff > 0:
                 #     l_perceptual_ = perceptual_loss_fn(inputs, raster_sketch).mean()
                 #     l_percep_content = l_perceptual_ * self.x_cfg.perceptual.content_coeff
 
-                # control points relative position loss
+                # stroke loss
                 l_rel_pos = torch.tensor(0.)
                 if self.x_cfg.pos_loss_weight > 0:
                     if self.x_cfg.pos_type == 'pos':
