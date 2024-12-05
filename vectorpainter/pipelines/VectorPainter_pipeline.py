@@ -3,8 +3,6 @@ import shutil
 import time
 from pathlib import Path
 
-import diffusers
-from diffusers import StableDiffusionXLPipeline
 from tqdm.auto import tqdm
 import torch
 import torch.nn.functional as F
@@ -139,6 +137,16 @@ class VectorPainterPipeline(ModelState):
 
         return renderer, recon_style_fpath
 
+    def decode_and_save_latent(self, zT, ldm_pipe, fname='decode_zT'):
+        zT = zT / ldm_pipe.vae.config.scaling_factor
+        zT = zT.unsqueeze(0).to(ldm_pipe.vae.device, dtype=ldm_pipe.vae.dtype).detach().clone()
+
+        with torch.no_grad():
+            decoded = ldm_pipe.vae.decode(zT, return_dict=False)[0]
+
+        decoded = (decoded.cpu() / 2 + 0.5).clamp(0, 1)
+        plot_img(decoded.float(), self.sd_sample_dir, fname=fname)
+
     def style_inversion(self, prompt, negative_prompt, style_prompt, init_fpath):
         init_img = Image.open(init_fpath).convert("RGB").resize((1024, 1024))
 
@@ -162,12 +170,7 @@ class VectorPainterPipeline(ModelState):
         zts = inversion.ddim_inversion(ldm_pipe, x0, style_prompt, self.x_cfg.num_inference_steps, guidance_scale)
         # zts: [ddim_steps+1, 4, w, h]
         zT, inversion_callback = inversion.make_inversion_callback(zts, offset=5)
-
-        zT = zT / ldm_pipe.vae.config.scaling_factor
-        zT = zT.to(dtype=ldm_pipe.vae.device).unsqueeze(0)
-        decode_zT = ldm_pipe.vae.decode(zT, return_dict=False)[0]
-        decode_zT = (decode_zT.cpu().detach() / 2 + 0.5).clamp(0, 1)
-        plot_img(decode_zT.float(), self.sd_sample_dir, fname='decode_zT')
+        self.decode_and_save_latent(zT, ldm_pipe, fname="decode_zT")
 
         # instant style
         scale = {
