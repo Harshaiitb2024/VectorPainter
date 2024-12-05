@@ -1,21 +1,9 @@
-# Copyright 2023 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# -*- coding: utf-8 -*-
+# Copyright (c) XiMing Xing. All rights reserved.
+# Description: inversion
 
-
-from __future__ import annotations
 from typing import Callable
-from diffusers import StableDiffusionXLPipeline
+from diffusers import StableDiffusionXLPipeline, DDPMScheduler
 import torch
 from tqdm import tqdm
 import numpy as np
@@ -136,9 +124,20 @@ def make_inversion_callback(zts, offset: int = 0) -> [T, InversionCallback]:
 def ddim_inversion(model: StableDiffusionXLPipeline,
                    x0: Image.Image,
                    prompt: str,
-                   num_inference_steps: int,
-                   guidance_scale, ) -> T:
+                   num_inv_steps: int,
+                   guidance_scale: float, ) -> T:
     z0 = _encode_image(model, x0)
-    model.scheduler.set_timesteps(num_inference_steps, device=z0.device)
+    model.scheduler.set_timesteps(num_inv_steps, device=z0.device)
     zs = _ddim_loop(model, z0, prompt, guidance_scale)
     return zs
+
+
+@torch.no_grad()
+def ddpm_inversion(model: StableDiffusionXLPipeline, x0: Image.Image, num_inv_steps: int):
+    scheduler = DDPMScheduler(beta_start=0.0001, beta_end=0.02, num_train_timesteps=1000)
+
+    z0 = _encode_image(model, x0)
+    noise = torch.randn_like(z0)
+    diffuse_timesteps = torch.full((z0.shape[0],), num_inv_steps).long().to(z0.device)
+    zt = scheduler.add_noise(z0, noise, diffuse_timesteps)
+    return zt
