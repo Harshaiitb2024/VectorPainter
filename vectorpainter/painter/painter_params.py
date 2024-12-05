@@ -293,6 +293,7 @@ class Painter(DiffVGState):
         return self.color_vars
 
     def save_svg(self, output_dir, fname):
+        self.clip_curve_shape()
         pydiffvg.save_svg(f'{output_dir}/{fname}.svg',
                           self.canvas_width,
                           self.canvas_height,
