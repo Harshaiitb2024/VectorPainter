@@ -150,7 +150,8 @@ class VectorPainterPipeline(ModelState):
             variant="fp16",
             local_files_only=not self.args.diffuser.download,
             force_download=self.args.diffuser.force_download,
-            ldm_speed_up=self.x_cfg.ldm_speed_up,
+            torch_compile=self.x_cfg.torch_compile,
+            scaled_dot_product_attention=self.x_cfg.SDPA,
             enable_xformers=self.x_cfg.enable_xformers,
             gradient_checkpoint=self.x_cfg.gradient_checkpoint,
         )
@@ -161,12 +162,12 @@ class VectorPainterPipeline(ModelState):
         zts = inversion.ddim_inversion(ldm_pipe, x0, style_prompt, self.x_cfg.num_inference_steps, guidance_scale)
         # zts: [ddim_steps+1, 4, w, h]
         zT, inversion_callback = inversion.make_inversion_callback(zts, offset=5)
-        zT = zT.unsqueeze(0)
 
-        # zT = zT / ldm_pipe.vae.config.scaling_factor
-        # decode_zT = ldm_pipe.vae.decode(zT, return_dict=False)[0]
-        # decode_zT = (decode_zT.cpu().detach() / 2 + 0.5).clamp(0, 1)
-        # plot_img(decode_zT.float(), self.sd_sample_dir, fname='decode_zT')
+        zT = zT / ldm_pipe.vae.config.scaling_factor
+        zT = zT.to(dtype=ldm_pipe.vae.device).unsqueeze(0)
+        decode_zT = ldm_pipe.vae.decode(zT, return_dict=False)[0]
+        decode_zT = (decode_zT.cpu().detach() / 2 + 0.5).clamp(0, 1)
+        plot_img(decode_zT.float(), self.sd_sample_dir, fname='decode_zT')
 
         # instant style
         scale = {

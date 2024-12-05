@@ -44,7 +44,8 @@ color_vars_threshold: 0.0 # uncomment the code
 
 # diffusion
 model_id: "sdxl" # sd14, sd15, sd21, sd21b, sdxl
-ldm_speed_up: False
+torch_compile: True
+SDPA: True
 enable_xformers: False
 gradient_checkpoint: False
 cpu_offload: True

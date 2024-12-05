@@ -8,7 +8,8 @@ from collections import OrderedDict
 from packaging import version
 
 import torch
-from diffusers import StableDiffusionXLPipeline, SchedulerMixin, UNet2DConditionModel, AutoencoderKL, DDIMScheduler
+from diffusers import StableDiffusionXLPipeline, AutoencoderKL, DDIMScheduler
+from diffusers.models.attention_processor import AttnProcessor2_0
 from diffusers.utils import is_torch_version, is_xformers_available
 
 DiffusersModels = OrderedDict({
@@ -37,10 +38,11 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
                        device: torch.device = "cuda",
                        torch_dtype: torch.dtype = torch.float16,
                        variant: str = 'fp16',
-                       local_files_only: bool = True,
+                       local_files_only: bool = False,
                        force_download: bool = False,
-                       ldm_speed_up: bool = False,
-                       enable_xformers: bool = True,
+                       torch_compile: bool = False,
+                       enable_xformers: bool = False,
+                       scaled_dot_product_attention: bool = True,
                        gradient_checkpoint: bool = False,
                        cpu_offload: bool = False,
                        vae_slicing: bool = False,
@@ -53,10 +55,13 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
         scheduler: any scheduler
         device: set device
         torch_dtype: data type
+        variant: model variant
         local_files_only: prohibited download model
         force_download: forced download model
-        ldm_speed_up: use the `torch.compile` api to speed up unet
+        torch_compile: use the `torch.compile` api to speed up unet
         enable_xformers: enable memory efficient attention from [xFormers]
+        scaled_dot_product_attention: torch.nn.functional.scaled_dot_product_attention (SDPA)
+                                      is an optimized and memory-efficient attention (similar to xFormers)
         gradient_checkpoint: activates gradient checkpointing for the current model
         cpu_offload: enable sequential cpu offload
         vae_slicing: enable sliced VAE decoding
@@ -64,7 +69,7 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
         unet_path: load unet checkpoint
 
     Returns:
-            diffusers.StableDiffusionPipeline
+            diffusers.StableDiffusionXLPipeline
     """
 
     # get model id
@@ -113,12 +118,26 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
         print(f"=> load lora module from {lora_path} ...")
 
     # torch.compile
-    if ldm_speed_up:
+    if torch_compile:
         if is_torch_version(">=", "2.0.0"):
-            pipeline.unet = torch.compile(pipeline.unet, mode="reduce-overhead", fullgraph=True)
+            torch._inductor.config.conv_1x1_as_mm = True
+            torch._inductor.config.coordinate_descent_tuning = True
+            torch._inductor.config.epilogue_fusion = False
+            torch._inductor.config.coordinate_descent_check_all_directions = True
+
+            pipeline.unet.to(memory_format=torch.channels_last)
+            pipeline.vae.to(memory_format=torch.channels_last)
+
+            # Compile the UNet and VAE.
+            pipeline.unet = torch.compile(pipeline.unet, mode="max-autotune", fullgraph=True)
+            pipeline.vae.decode = torch.compile(pipeline.vae.decode, mode="max-autotune", fullgraph=True)
+
             print(f"=> enable torch.compile on U-Net")
         else:
             print(f"=> warning: calling torch.compile speed-up failed, since torch version <= 2.0.0")
+
+    if scaled_dot_product_attention:
+        pipeline.unet.set_attn_processor(AttnProcessor2_0())
 
     # Meta xformers
     if enable_xformers:
