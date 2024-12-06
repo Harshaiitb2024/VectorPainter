@@ -2,19 +2,29 @@
 
 ### 🔥Quickstart
 
-- Starry
+- style: `starry.jpg`
 
 ```shell
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A photo of Sydney opera house'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/Starry/sydney_starry' seed=666
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/Starry/mountain' seed=666
+# sydney opera house
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A photo of Sydney opera house'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/Starry/sydney_starry' seed=666
+# mountain and cloud
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/Starry/mountain' seed=666
 ```
 
-- BrushStroke Painting
+- style: `brushstroke_azure_painting.jpg`
 
 ```shell
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
+# mountain and cloud
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
+# test case, low recon step in stage 1
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" canvas_w=1024 canvas_h=1024 x.imit_stage.num_iter=5 x.torch_compile=false result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
+```
 
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" x.imit_stage.num_iter=5 x.torch_compile=false result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
+- style: `oil_bouquet_of_flowers.jpg`
+
+```shell
+# mountain and cloud
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/oil_bouquet_of_flowers.jpg" "style_prompt='flowers, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/oil_bouquet_of_flowers/mountain_and_cloud' seed=666
 ```
 
 ### Starry
@@ -73,10 +83,4 @@ CUDA_VISIBLE_DEVICES=6 python vectorpainter.py "prompt='The Great Pyramid.'" x=s
 CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='A Torii Gate.'" x=stroke target="./assets/majeur.jpg" result_path='./workspace/majeur/torii_majeur'
 CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='The Great Wall.'" x=stroke target="./assets/majeur.jpg" result_path='./workspace/majeur/wall_majeur'
 CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='The Eiffel Tower.'" x=stroke target="./assets/majeur.jpg" result_path='./workspace/majeur/eiffel_majeur' seed=101
-```
-
-### BrushStroke Painting
-
-```shell
-python strokestyle.py "prompt='a photo of Sydney opera house.'" x=stroke target="./assets/BrushStrokePainting-1.jpeg" result_path='./workdir/Painting/BrushStroke-1'
 ```

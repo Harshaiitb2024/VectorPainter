@@ -77,7 +77,8 @@ class VectorPainterPipeline(ModelState):
         if self.make_video:
             self.print("\n making video...")
             video_path = self.result_path / "rendering.mp4"
-            create_video(video_path, (self.frame_log_dir / "iter%d.png").as_posix(), self.args.framerate)
+            frame_log_dir = self.frame_log_dir / "iter%d.png"
+            create_video(video_path, frame_log_dir, self.args.framerate)
 
         self.close(msg="painterly rendering complete.")
 

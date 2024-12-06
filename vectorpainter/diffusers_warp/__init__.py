@@ -2,36 +2,15 @@
 # Copyright (c) XiMing Xing. All rights reserved.
 # Author: XiMing Xing
 # Description:
+
 from typing import AnyStr
 import pathlib
-from collections import OrderedDict
 from packaging import version
 
 import torch
 from diffusers import StableDiffusionXLPipeline, AutoencoderKL, DDIMScheduler
 from diffusers.models.attention_processor import AttnProcessor2_0
 from diffusers.utils import is_torch_version, is_xformers_available
-
-DiffusersModels = OrderedDict({
-    "sd14": "CompVis/stable-diffusion-v1-4",  # resolution: 512
-    "sd15": "runwayml/stable-diffusion-v1-5",  # resolution: 512
-    "sd21b": "stabilityai/stable-diffusion-2-1-base",  # resolution: 512
-    "sd21": "stabilityai/stable-diffusion-2-1",  # resolution: 768
-    "sdxl": "stabilityai/stable-diffusion-xl-base-1.0",  # resolution: 1024
-})
-
-# default resolution
-_model2resolution = {
-    "sd14": 512,
-    "sd15": 512,
-    "sd21b": 512,
-    "sd21": 768,
-    "sdxl": 1024,
-}
-
-
-def model2res(model_id: str):
-    return _model2resolution.get(model_id, 512)
 
 
 def init_sdxl_pipeline(scheduler: str = 'ddim',
@@ -80,7 +59,7 @@ def init_sdxl_pipeline(scheduler: str = 'ddim',
     vae = AutoencoderKL.from_pretrained(vae_model_id,
                                         torch_dtype=torch.float16,
                                         local_files_only=local_files_only)
-    print(f"load {vae_model_id}")
+    print(f"Load {vae_model_id}")
 
     # process diffusion model
     if scheduler == 'ddim':
