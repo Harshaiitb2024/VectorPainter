@@ -1,9 +1,5 @@
 method: "VectorPainter"
 
-image_size: 1024
-path_svg: ~
-fix_scale: False # if the target image is not squared, it is recommended to fix the scale
-
 # train
 imit_stage: # brushstroke imitation
   num_iter: 250
@@ -22,6 +18,7 @@ synth_stage: # synthesis with style supervision
   decay_steps: [ 1000, 1500 ]
 
 batch_size: 1 # TODO: support batch size
+path_svg: ~
 
 # position loss weight
 pos_type: 'sinkhorn' # 'pos', 'bez', 'sinkhorn'
@@ -43,8 +40,8 @@ optim_rgba: True # if True, the stroke RGBA is optimized
 color_vars_threshold: 0.0 # uncomment the code
 
 # diffusion
-model_id: "sdxl" # sd14, sd15, sd21, sd21b, sdxl
-torch_compile: True
+model_id: "sdxl"
+torch_compile: False
 SDPA: True
 enable_xformers: False
 gradient_checkpoint: False

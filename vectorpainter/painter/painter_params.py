@@ -5,6 +5,7 @@
 
 import pathlib
 import random
+from typing import Tuple
 
 import omegaconf
 from tqdm.auto import trange
@@ -28,11 +29,13 @@ class Painter(DiffVGState):
             style_dir: pathlib.Path,
             num_strokes: int = 4,
             num_segments: int = 4,
-            canvas_size: int = 512,
+            canvas_size: Tuple[int, int] = (512, 512),
             device=torch.device('cuda'),
     ):
-        super(Painter, self).__init__(device, print_timing=diffvg_cfg.print_timing,
-                                      canvas_width=canvas_size, canvas_height=canvas_size)
+        super(Painter, self).__init__(device,
+                                      print_timing=diffvg_cfg.print_timing,
+                                      canvas_width=canvas_size[1],
+                                      canvas_height=canvas_size[0])
         self.style_img = style_img
         self.style_dir = style_dir
 
@@ -267,7 +270,7 @@ class Painter(DiffVGState):
                 path.points.requires_grad = True
                 self.point_vars.append(path.points)
 
-    def get_points_params(self):
+    def get_point_parameters(self):
         return self.point_vars
 
     def set_width_parameters(self):
@@ -330,7 +333,7 @@ class SketchPainterOptimizer:
 
     def init_optimizers(self):
         self.renderer.set_points_parameters()
-        self.point_optimizer = torch.optim.Adam(self.renderer.get_points_params(), lr=self.point_lr)
+        self.point_optimizer = torch.optim.Adam(self.renderer.get_point_parameters(), lr=self.point_lr)
         if self.optim_color:
             self.renderer.set_color_parameters()
             self.color_optimizer = torch.optim.Adam(self.renderer.get_color_parameters(), lr=self.color_lr)

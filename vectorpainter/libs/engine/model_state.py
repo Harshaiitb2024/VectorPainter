@@ -32,13 +32,14 @@ class ModelState:
     def __init__(
             self,
             args: DictConfig,
-            log_path_suffix: str = None,
-            ignore_log=False,  # whether to create log file or not
+            log_path_suffix: str = "",
     ) -> None:
         self.args: DictConfig = args
         # set cfg
         self.state_cfg = args.state
         self.x_cfg = args.x
+        # canvas size
+        self.canvas_width, self.canvas_height = args.canvas_w, args.canvas_h
 
         # runtime output directory
         with open_dict(args):
@@ -56,11 +57,7 @@ class ModelState:
 
         # update result_path: ./runs/{method_name}-{exp_name}/{log_path_suffix}
         # noting: can be understood as "results dir / methods / ablation study / your result"
-        config_name_only = str(self.x_cfg.method).split(".")[0]
-        if log_path_suffix is not None:
-            self.result_path = self.result_path / f"{config_name_only}-{log_path_suffix}"
-        else:
-            self.result_path = self.result_path / f"{config_name_only}"
+        self.result_path = self.result_path / f"{log_path_suffix}"
 
         """init visualized tracker"""
         # TODO: monitor with WANDB or TENSORBOARD

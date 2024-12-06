@@ -9,7 +9,7 @@ prompt: ~
 neg_prompt: ~ # negative prompt
 
 # canvas size
-canvas_w: 1024 # canvas_width
+canvas_w: 768 # canvas_width
 canvas_h: 1024 # canvas_height
 
 # accelerate config

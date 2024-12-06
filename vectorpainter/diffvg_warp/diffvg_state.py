@@ -3,6 +3,7 @@
 # Description: parent class
 # Copyright (c) 2023, XiMing Xing.
 # License: MIT License
+
 import pathlib
 from typing import AnyStr, Union
 import xml.etree.ElementTree as etree
@@ -76,6 +77,7 @@ class DiffVGState(torch.nn.Module):
 
     def render_image(self, seed: int = 0):
         self.clip_curve_shape()
+
         scene_args = pydiffvg.RenderFunction.serialize_scene(
             self.canvas_width, self.canvas_height, self.shapes, self.shape_groups
         )
@@ -101,7 +103,6 @@ class DiffVGState(torch.nn.Module):
                  filename: Union[AnyStr, pathlib.Path],
                  use_gamma: bool = False,
                  background: str = None):
-        self.clip_curve_shape()
         """
         Save an SVG file with specified parameters and shapes.
         Noting: New version of SVG saving function that is an adaptation of pydiffvg.save_svg.
@@ -119,6 +120,8 @@ class DiffVGState(torch.nn.Module):
         Returns:
             None
         """
+        self.clip_curve_shape()
+
         width = self.canvas_width
         height = self.canvas_height
         shapes = self.shapes

@@ -43,13 +43,11 @@ class SinkhornLoss(nn.Module):
         mass_y = img_2.reshape(batch_size, -1)
 
         if self.normalize:
-            loss = spc.sinkhorn_normalized(
-                canvas_grids, gt_grids, epsilon=self.epsilon, niter=self.niter,
-                mass_x=mass_x, mass_y=mass_y)
+            loss = spc.sinkhorn_normalized(canvas_grids, gt_grids, epsilon=self.epsilon, niter=self.niter,
+                                           mass_x=mass_x, mass_y=mass_y)
         else:
-            loss = spc.sinkhorn_loss(
-                canvas_grids, gt_grids, epsilon=self.epsilon, niter=self.niter,
-                mass_x=mass_x, mass_y=mass_y)
+            loss = spc.sinkhorn_loss(canvas_grids, gt_grids, epsilon=self.epsilon, niter=self.niter,
+                                     mass_x=mass_x, mass_y=mass_y)
 
         return loss
 

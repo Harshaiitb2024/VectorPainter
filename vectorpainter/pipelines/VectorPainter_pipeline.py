@@ -1,3 +1,4 @@
+from typing import Union, Tuple
 import copy
 import shutil
 import time
@@ -14,7 +15,6 @@ from vectorpainter.diffusers_warp import init_sdxl_pipeline
 from vectorpainter.libs.engine import ModelState
 from vectorpainter.painter import Painter, SketchPainterOptimizer, inversion, SinkhornLoss, \
     get_relative_pos, bezier_curve_loss
-from vectorpainter.painter.sketch_utils import fix_image_scale
 from vectorpainter.utils.plot import plot_couple, plot_img
 from vectorpainter.utils import mkdirs, create_video
 
@@ -23,10 +23,11 @@ Tensor = torch.Tensor
 
 class VectorPainterPipeline(ModelState):
     def __init__(self, args):
-        logdir_ = f"seed{args.seed}-im{args.x.image_size}" \
-                  f"-{args.x.model_id}" \
-                  f"-{time.strftime('%Y-%m-%d-%H-%M', time.localtime(time.time()))}"
-        super().__init__(args, log_path_suffix=logdir_)
+        _exp = f"seed{args.seed}" \
+               f"-canvas-{args.canvas_w}-{args.canvas_h}" \
+               f"-{args.x.model_id}" \
+               f"-{time.strftime('%Y-%m-%d-%H-%M', time.localtime(time.time()))}"
+        super().__init__(args, log_path_suffix=_exp)
 
         self.imit_cfg = self.x_cfg.imit_stage
         self.synt_cfg = self.x_cfg.synth_stage
@@ -38,11 +39,9 @@ class VectorPainterPipeline(ModelState):
         self.imit_svg_logs_dir = self.result_path / "imit_svg_logs"
         self.png_logs_dir = self.result_path / "png_logs"
         self.svg_logs_dir = self.result_path / "svg_logs"
-
         mkdirs([self.result_path, self.style_dir, self.sd_sample_dir,
                 self.imit_png_logs_dir, self.imit_svg_logs_dir,
                 self.png_logs_dir, self.svg_logs_dir])
-        self.print(f"results path: {self.result_path}")
 
         self.make_video = self.args.mv
         if self.make_video:
@@ -56,7 +55,10 @@ class VectorPainterPipeline(ModelState):
         self.print(f"text prompt: {text_prompt}")
         self.print(f"negative prompt: {negative_prompt}")
 
-        style_tensor = self.load_and_process_style_img(style_fpath)
+        # load and preprocess style
+        style_tensor = self.load_img_to_tensor(style_fpath)
+        self.print(f"load style file from: {style_fpath}")
+        shutil.copy(style_fpath, self.style_dir)  # copy style file
         plot_img(style_tensor, self.style_dir, fname="style_image_input")
         self.print(f"style_input shape: {style_tensor.shape}")
 
@@ -79,7 +81,7 @@ class VectorPainterPipeline(ModelState):
 
         self.close(msg="painterly rendering complete.")
 
-    def brushstroke_imitation(self, renderer: Painter):
+    def brushstroke_imitation(self, renderer: Painter) -> Tuple[Painter, Path]:
         # load optimizer
         optimizer = SketchPainterOptimizer(renderer,
                                            self.imit_cfg.lr,
@@ -91,7 +93,7 @@ class VectorPainterPipeline(ModelState):
         optimizer.init_optimizers()
 
         self.print(f"-> Stoke Imitation Stage ...")
-        self.print(f"-> Painter point params: {len(renderer.get_points_params())}")
+        self.print(f"-> Painter point params: {len(renderer.get_point_parameters())}")
         self.print(f"-> Painter width params: {len(renderer.get_width_parameters())}")
         self.print(f"-> Painter color params: {len(renderer.get_color_parameters())}")
 
@@ -147,7 +149,7 @@ class VectorPainterPipeline(ModelState):
         decoded = (decoded.cpu() / 2 + 0.5).clamp(0, 1)
         plot_img(decoded.float(), self.sd_sample_dir, fname=fname)
 
-    def style_inversion(self, prompt, negative_prompt, style_prompt, init_fpath):
+    def style_inversion(self, prompt, negative_prompt, style_prompt, init_fpath) -> Image:
         init_img = Image.open(init_fpath).convert("RGB").resize((1024, 1024))
 
         # load pretrained diffusion model
@@ -208,10 +210,8 @@ class VectorPainterPipeline(ModelState):
         self.print(outputs.shape)
 
         gen_file = self.sd_sample_dir / 'samples.png'
-        # view_images([np.array(outputs)], save_image=True, fp=gen_file)
         save_image(outputs, fp=gen_file)
         target_file = self.sd_sample_dir / 'target.png'
-        # view_images([np.array(outputs[-1])], save_image=True, fp=target_file)
         plot_img(outputs[-1], self.sd_sample_dir, fname='target')
 
         del ldm_pipe
@@ -224,12 +224,12 @@ class VectorPainterPipeline(ModelState):
                                          style_prompt, recon_style_fpath: Path):
         # inversion
         target = self.style_inversion(prompt, negative_prompt, style_prompt, recon_style_fpath)
-        inputs = self.get_target(target, self.x_cfg.image_size, self.x_cfg.fix_scale)
+        inputs = self.img_to_tensor(target)
         inputs = inputs.detach()  # inputs as GT
 
         # log params
-        init_relative_pos = get_relative_pos(renderer.get_points_params()).detach()  # init stroke position as GT
-        init_curves = copy.deepcopy(renderer.get_points_params())
+        init_relative_pos = get_relative_pos(renderer.get_point_parameters()).detach()  # init stroke position as GT
+        init_curves = copy.deepcopy(renderer.get_point_parameters())
 
         # init optimizer
         optimizer = SketchPainterOptimizer(renderer,
@@ -242,7 +242,7 @@ class VectorPainterPipeline(ModelState):
         optimizer.init_optimizers()
 
         self.print(f"\n-> Synthesis with Style Supervision ...")
-        self.print(f"-> Painter points Params: {len(renderer.get_points_params())}")
+        self.print(f"-> Painter points Params: {len(renderer.get_point_parameters())}")
         self.print(f"-> Painter width Params: {len(renderer.get_width_parameters())}")
         self.print(f"-> Painter color Params: {len(renderer.get_color_parameters())}")
 
@@ -294,10 +294,10 @@ class VectorPainterPipeline(ModelState):
                 l_rel_pos = torch.tensor(0.)
                 if self.x_cfg.pos_loss_weight > 0:
                     if self.x_cfg.pos_type == 'pos':
-                        l_rel_pos = F.mse_loss(get_relative_pos(renderer.get_points_params()),
+                        l_rel_pos = F.mse_loss(get_relative_pos(renderer.get_point_parameters()),
                                                init_relative_pos) * self.x_cfg.pos_loss_weight
                     elif self.x_cfg.pos_type == 'bez':
-                        l_rel_pos = bezier_curve_loss(renderer.get_points_params(),
+                        l_rel_pos = bezier_curve_loss(renderer.get_point_parameters(),
                                                       init_curves) * self.x_cfg.pos_loss_weight
                     elif self.x_cfg.pos_type == 'sinkhorn':
                         l_rel_pos = sinkhorn_loss_fn(raster_sketch, renderer.style_img) * self.x_cfg.pos_loss_weight
@@ -343,52 +343,24 @@ class VectorPainterPipeline(ModelState):
         final_raster_sketch = renderer.get_image().to(self.device)
         plot_img(final_raster_sketch, self.result_path, fname='final_render')
 
-    def load_and_process_style_img(self, style_fpath):
-        style_path = Path(style_fpath)
-        assert style_path.exists(), f"{style_fpath} is not exist!"
+    def img_to_tensor(self, img) -> torch.Tensor:
+        _transforms = [
+            transforms.Resize(size=(self.canvas_width, self.canvas_height)),
+            transforms.ToTensor(),
+            transforms.Lambda(lambda t: t.unsqueeze(0)),
+        ]
+        if self.canvas_height == self.canvas_width:
+            _transforms.append(transforms.CenterCrop(self.canvas_height))
 
-        def _to_tensor(style_path):
-            process_comp = transforms.Compose([
-                transforms.Resize(size=(self.x_cfg.image_size, self.x_cfg.image_size)),
-                transforms.ToTensor(),
-                transforms.Lambda(lambda t: t.unsqueeze(0)),
-            ])
+        transform_pipe = transforms.Compose(_transforms)
+        img_tensor = transform_pipe(img).to(self.device)
+        return img_tensor
 
-            style_pil = Image.open(style_path).convert("RGB")  # open file
-            style_tensor = process_comp(style_pil).to(self.device)  # preprocess
-            return style_tensor
-
-        style_img = _to_tensor(style_path.as_posix())
-        self.print(f"load style file from: {style_path.as_posix()}")
-        shutil.copy(style_path, self.style_dir)  # copy style file
-        return style_img
-
-    def get_target(self, target, image_size, fix_scale):
-        if target.mode == "RGBA":
-            # Create a white rgba background
-            new_image = Image.new("RGBA", target.size, "WHITE")
-            # Paste the image on the background.
-            new_image.paste(target, (0, 0), target)
-            target = new_image
-        target = target.convert("RGB")
-
-        if fix_scale:
-            target = fix_image_scale(target)
-
-        # define image transforms
-        transforms_ = []
-        if target.size[0] != target.size[1]:
-            transforms_.append(transforms.Resize((image_size, image_size)))
-        else:
-            transforms_.append(transforms.Resize(image_size))
-            transforms_.append(transforms.CenterCrop(image_size))
-        transforms_.append(transforms.ToTensor())
-
-        # preprocess
-        data_transforms = transforms.Compose(transforms_)
-        target_ = data_transforms(target).unsqueeze(0).to(self.device)
-
-        return target_
+    def load_img_to_tensor(self, file_path: Union[str, Path]):
+        assert Path(file_path).exists(), f"{file_path} is not exist!"
+        pil_img = Image.open(file_path).convert("RGB")
+        img_tensor = self.img_to_tensor(pil_img)
+        return img_tensor
 
     def load_render(self, style_img):
         renderer = Painter(
@@ -398,7 +370,7 @@ class VectorPainterPipeline(ModelState):
             style_dir=self.style_dir,
             num_strokes=self.x_cfg.num_paths,
             num_segments=self.x_cfg.num_segments,
-            canvas_size=self.x_cfg.image_size,
+            canvas_size=(self.canvas_width, self.canvas_height),
             device=self.device
         )
         return renderer
