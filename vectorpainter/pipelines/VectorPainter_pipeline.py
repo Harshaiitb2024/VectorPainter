@@ -71,7 +71,7 @@ class VectorPainterPipeline(ModelState):
         # stage 1
         renderer, recon_style_fpath = self.brushstroke_imitation(renderer)
         # stage 2
-        self.synthesis_with_style_supervision(text_prompt, negative_prompt, renderer, style_prompt, recon_style_fpath)
+        self.synthesis_with_style_supervision(text_prompt, negative_prompt, renderer, style_prompt, style_fpath)
 
         # save the painting process as a video
         if self.make_video:
@@ -150,8 +150,24 @@ class VectorPainterPipeline(ModelState):
         decoded = (decoded.cpu() / 2 + 0.5).clamp(0, 1)
         plot_img(decoded.float(), self.sd_sample_dir, fname=fname)
 
+    def captioning(self, image):
+        from transformers import Blip2ForConditionalGeneration, Blip2Processor
+        blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-6.7b")
+        blip2_model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-6.7b", load_in_8bit=True, device_map={"": 0},
+            torch_dtype=torch.float16
+        )  # doctest: +IGNORE_RESULT
+        inputs = blip2_processor(images=image, return_tensors="pt").to(torch.float16)
+        generated_ids = blip2_model.generate(**inputs)
+        caption = blip2_processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+        self.print(caption)
+        del blip2_processor, blip2_model
+        torch.cuda.empty_cache()
+        return caption
+
     def style_inversion(self, prompt, negative_prompt, style_prompt, init_fpath) -> Image:
         init_img = Image.open(init_fpath).convert("RGB").resize((1024, 1024))
+        style_prompt = style_prompt if style_prompt is not None else self.captioning(init_img)
 
         # load pretrained diffusion model
         ldm_pipe = init_sdxl_pipeline(
@@ -192,6 +208,8 @@ class VectorPainterPipeline(ModelState):
                               dtype=ldm_pipe.unet.dtype)
         latents[0] = zT
         latents[1] = zT.clone()
+        if isinstance(negative_prompt, str):
+            negative_prompt = [negative_prompt] * len(prompts)
 
         outputs = ldm_pipe(
             prompt=prompts,
