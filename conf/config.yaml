@@ -6,22 +6,21 @@
 style: ~ # style file path
 style_prompt: ~
 prompt: ~
-neg_prompt: "nsfw, lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan" # negative prompt
+# negative prompt
+neg_prompt: "realistic, realistic style"
 
 # canvas size
 canvas_w: 1024 # canvas_width
 canvas_h: 1024 # canvas_height
 
-# accelerate config
+# Accelerate config
 state:
   cpu: False # use cpu
   mprec: 'no' # mixed precision, choices: 'no', 'fp16', 'bf16'
 
-# diffusers config
-diffuser:
-  download: False # Set this variable to True the first time it runs
-  force_download: False
-  resume_download: False
+# Diffusers config
+model_download: False # Set this variable to True the first time it runs
+force_download: False
 
 # PyDiffVG config
 diffvg:
