@@ -17,7 +17,9 @@ CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, wit
 # mountain and cloud
 CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt=''" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
 # test case, low recon step in stage 1
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py x=stroke "prompt='The Great Pyramid.'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_Pyramid' seed=666
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A painting of a watermelon. brushstoke style'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_watermelon'
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A bouquet of blue roses.'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_rose'
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='sea waves. brushstoke style'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=768 result_path='./workspace/brushstroke_azure_painting/brush_wave'
 ```
 
 - style: `oil_bouquet_of_flowers.jpg`
@@ -74,7 +76,17 @@ CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='A boat on the lake.'" x=
 ### Scream
 
 ```shell
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py "prompt='fire in the mountain.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/fire_scream' x.num_paths=1000 seed=100
+CUDA_VISIBLE_DEVICES=1 python vectorpainter.py "prompt='fire in the mountain.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/fire_scream'
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py "prompt='The Great Wall.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/wall_scream'
+CUDA_VISIBLE_DEVICES=1 python vectorpainter.py "prompt='The Great Pyramid.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/pyramid_scream'
+CUDA_VISIBLE_DEVICES=0 python vectorpainter.py "prompt='A Torii Gate.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/torii_scream'
+```
+
+### anxiety
+
+```shell
+CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='fire in the mountain.'" x=stroke style="./assets/anxiety.jpg" result_path='./workspace/anxiety/fire_anxiety'
+CUDA_VISIBLE_DEVICES=4 python vectorpainter.py "prompt='The winding Great Wall, with light sky. The anxiety of Edvard Munch style.'" x=stroke style="./assets/anxiety.jpg" result_path='./workspace/anxiety/wall_anxiety' seed=100
 ```
 
 ### Antimonocromatismo
