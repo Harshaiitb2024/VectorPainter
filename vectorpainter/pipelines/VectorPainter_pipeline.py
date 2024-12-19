@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 from torchvision.utils import save_image
 from PIL import Image
+from transformers import Blip2ForConditionalGeneration, Blip2Processor
 
 from vectorpainter.diffusers_warp import init_sdxl_pipeline
 from vectorpainter.libs.engine import ModelState
@@ -71,7 +72,11 @@ class VectorPainterPipeline(ModelState):
         # stage 1
         renderer, recon_style_fpath = self.brushstroke_imitation(renderer)
         # stage 2
-        self.synthesis_with_style_supervision(text_prompt, negative_prompt, renderer, style_prompt, style_fpath)
+        self.synthesis_with_style_supervision(text_prompt,
+                                              negative_prompt,
+                                              renderer,
+                                              style_prompt,
+                                              style_fpath)
 
         # save the painting process as a video
         if self.make_video:
@@ -151,16 +156,22 @@ class VectorPainterPipeline(ModelState):
         plot_img(decoded.float(), self.sd_sample_dir, fname=fname)
 
     def captioning(self, image):
-        from transformers import Blip2ForConditionalGeneration, Blip2Processor
-        blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-6.7b")
+        blip2_processor = Blip2Processor.from_pretrained(
+            "Salesforce/blip2-opt-6.7b",
+            local_files_only=not self.args.model_download
+        )
         blip2_model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-6.7b", load_in_8bit=True, device_map={"": 0},
-            torch_dtype=torch.float16
+            "Salesforce/blip2-opt-6.7b",
+            load_in_8bit=True,
+            device_map={"": 0},
+            torch_dtype=torch.float16,
+            local_files_only=not self.args.model_download
         )  # doctest: +IGNORE_RESULT
         inputs = blip2_processor(images=image, return_tensors="pt").to(torch.float16)
         generated_ids = blip2_model.generate(**inputs)
         caption = blip2_processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        self.print(caption)
+        self.print(f"blip style prompt: {caption}")
+
         del blip2_processor, blip2_model
         torch.cuda.empty_cache()
         return caption
@@ -175,8 +186,8 @@ class VectorPainterPipeline(ModelState):
             device=self.device,
             torch_dtype=torch.float16,
             variant="fp16",
-            local_files_only=not self.args.diffuser.download,
-            force_download=self.args.diffuser.force_download,
+            local_files_only=not self.args.model_download,
+            force_download=self.args.force_download,
             torch_compile=self.x_cfg.torch_compile,
             scaled_dot_product_attention=self.x_cfg.SDPA,
             enable_xformers=self.x_cfg.enable_xformers,
@@ -198,7 +209,7 @@ class VectorPainterPipeline(ModelState):
         ldm_pipe.load_ip_adapter("h94/IP-Adapter",
                                  subfolder="sdxl_models",
                                  weight_name="ip-adapter_sdxl.bin",
-                                 local_files_only=not self.args.diffuser.download)
+                                 local_files_only=not self.args.model_download)
         ldm_pipe.set_ip_adapter_scale(scale)
 
         prompts = [style_prompt, prompt, prompt]

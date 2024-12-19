@@ -39,7 +39,7 @@ class ModelState:
         self.state_cfg = args.state
         self.x_cfg = args.x
         # canvas size
-        self.canvas_width, self.canvas_height = args.canvas_w, args.canvas_h
+        self.canvas_width, self.canvas_height = args.canvas_h, args.canvas_w
 
         # runtime output directory
         with open_dict(args):

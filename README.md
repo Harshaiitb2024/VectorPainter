@@ -16,6 +16,7 @@ CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, wit
 ```shell
 # mountain and cloud
 CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt=''" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
+# mountain and cloud,
 # test case, low recon step in stage 1
 CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A painting of a watermelon. brushstoke style'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_watermelon'
 CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A bouquet of blue roses.'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_rose'
@@ -30,8 +31,14 @@ CUDA_VISIBLE_DEVICES=1 python vectorpainter.py x=stroke "prompt='A bouquet of ro
 ```
 
 - style: `oil_full_field.jpg`
+
 ```shell
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='Field full of sunflowers'" style="./assets/oil_full_field.jpg" "style_prompt='flowers, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/oil_full_field/sunflowers' seed=666
+# Sunrise
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A breathtaking sunrise over a tranquil ocean, with golden and pink hues reflecting off the calm waves. The sky transitions from deep purple to warm orange, with a few soft clouds adding depth. Silhouettes of distant mountains and a small fishing boat in the horizon create a peaceful and serene atmosphere'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Sunrise_1' seed=8889
+# Spring
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A vibrant spring meadow filled with blooming wildflowers. A gentle stream winds through the lush green grass, surrounded by blossoming cherry trees. The scene is bathed in soft sunlight with a clear blue sky and fluffy white clouds, evoking a sense of renewal and joy'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Spring_1' seed=8889
+# Tuscany
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='impressionist painting on canvas of Tuscany, beautiful landscape with Tuscan farmhouse, in the style of impressionist masters, warm colors, delicate brushstrokes'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Tuscany_1' seed=8889
 ```
 
 ### Starry
