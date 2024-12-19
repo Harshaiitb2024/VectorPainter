@@ -34,7 +34,9 @@ CUDA_VISIBLE_DEVICES=1 python vectorpainter.py x=stroke "prompt='A bouquet of ro
 # Sunrise
 CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A breathtaking sunrise over a tranquil ocean, with golden and pink hues reflecting off the calm waves. The sky transitions from deep purple to warm orange, with a few soft clouds adding depth. Silhouettes of distant mountains and a small fishing boat in the horizon create a peaceful and serene atmosphere'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Sunrise_1' seed=8889
 # Spring
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A vibrant spring meadow filled with blooming wildflowers in various colors, such as pink, yellow, and lavender. A gentle stream winds through the lush green grass, surrounded by blossoming cherry trees. The scene is bathed in soft sunlight with a clear blue sky and fluffy white clouds, evoking a sense of renewal and joy'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Spring_1' seed=8889
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A vibrant spring meadow filled with blooming wildflowers. A gentle stream winds through the lush green grass, surrounded by blossoming cherry trees. The scene is bathed in soft sunlight with a clear blue sky and fluffy white clouds, evoking a sense of renewal and joy'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Spring_1' seed=8889
+# Tuscany
+CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='impressionist painting on canvas of Tuscany, beautiful landscape with Tuscan farmhouse, in the style of impressionist masters, warm colors, delicate brushstrokes'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Tuscany_1' seed=8889
 ```
 
 ### Starry

@@ -7,7 +7,7 @@ style: ~ # style file path
 style_prompt: ~
 prompt: ~
 # negative prompt
-neg_prompt: "realistic, realistic style"
+neg_prompt: "realistic, realistic style, nsfw, username, realism, out of frame"
 
 # canvas size
 canvas_w: 1024 # canvas_width
