@@ -37,8 +37,8 @@ result_path: './workspace'
 save_step: 50
 
 # visual rendering process
-mv: True # make video
-framefreq: 50 # save the image interval
+mv: False # make video
+framefreq: 5 # save the image interval
 framerate: 24 # by adjusting the frame rate, you can control the playback speed of the output video
 
 # hydra setting

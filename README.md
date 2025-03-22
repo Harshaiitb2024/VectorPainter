@@ -1,112 +1,85 @@
-# VectorPainter
+# VectorPainter: Advanced Stylized Vector Graphics Synthesis Using Stroke-Style Priors
 
-### 🔥Quickstart
+[![ICME 2025](https://img.shields.io/badge/ICME%202025-Paper-6420AA?style=for-the-badge&logo=openreview&logoColor=white)](https://arxiv.org/abs/2405.02962)
+[![ArXiv](https://img.shields.io/badge/arXiv-2405.02962-FF6347?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/abs/2405.02962)
+[![Project Website](https://img.shields.io/badge/Website-Project%20Page-4682B4?style=for-the-badge&logo=github&logoColor=white)](https://hjc-owo.github.io/VectorPainterProject/)
 
-- style: `starry.jpg`
+This repository contains our official implementation of the ICME 2025 paper: "VectorPainter: Advanced Stylized Vector Graphics Synthesis Using Stroke-Style Priors." VectorPainter synthesizes text-guided vector graphics by imitating strokes.
 
-```shell
-# sydney opera house
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py x=stroke "prompt='A photo of Sydney opera house'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/Starry/sydney_starry_wo_ddim' seed=666
-# mountain and cloud
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky'" style="./assets/starry.jpg" "style_prompt='Van Gogh, Starry Sky, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/Starry/mountain' seed=666
-```
+![teaser](./image/teaser.png)
 
-- style: `brushstroke_azure_painting.jpg`
+## 🔥 Latest Update
 
-```shell
-# mountain and cloud
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/brushstroke_azure_painting.jpg" "style_prompt=''" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_mountain' seed=666
-# mountain and cloud,
-# test case, low recon step in stage 1
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A painting of a watermelon. brushstoke style'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_watermelon'
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A bouquet of blue roses.'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/brushstroke_azure_painting/brush_rose'
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='sea waves. brushstoke style'" style="./assets/brushstroke_azure_painting.jpg" canvas_w=1024 canvas_h=768 result_path='./workspace/brushstroke_azure_painting/brush_wave'
-```
+- _2025.03_: 🔥 We released the **code** for [VectorPainter](https://hjc-owo.github.io/VectorPainterProject/).
+- _2025.03_: 🎉 VectorPainter accepted by ICME 2025. 🎉
 
-- style: `oil_bouquet_of_flowers.jpg`
+## 📌 Installation Guide
+
+### 🛠️ Step 1: Set Up the Environment
+
+To quickly get started with **VectorPainter**, follow the steps below.  
+These instructions will help you run **quick inference locally**.
+
+Run the following command in the **top-level directory**:
 
 ```shell
-# mountain and cloud
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py x=stroke "prompt='A bouquet of roses in a vase.'" style="./assets/oil_bouquet_of_flowers.jpg" "style_prompt='flowers, oil painting'" canvas_w=1024 canvas_h=1024 result_path='./workspace/oil_bouquet_of_flowers/roses' seed=666
+chmod +x install.sh
+bash install.sh
 ```
 
-- style: `oil_full_field.jpg`
+### 🛠️ Step 2: Download Pretrained Stable Diffusion Model
 
+VectorPainter requires a pretrained Stable Diffusion (SD) model.
+
+#### 🔄 Auto-Download (Recommended)
+
+Set `model_download=True` in `/conf/config.yaml` before running VectorPainter.
+Alternatively, append `model_download=True` to the execution script.
+
+## 🎨 Quickstart
+
+### Style: Starry Night by van Gogh
+
+- sydney opera house
 ```shell
-# Sunrise
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A breathtaking sunrise over a tranquil ocean, with golden and pink hues reflecting off the calm waves. The sky transitions from deep purple to warm orange, with a few soft clouds adding depth. Silhouettes of distant mountains and a small fishing boat in the horizon create a peaceful and serene atmosphere'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Sunrise_1' seed=8889
-# Spring
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A vibrant spring meadow filled with blooming wildflowers. A gentle stream winds through the lush green grass, surrounded by blossoming cherry trees. The scene is bathed in soft sunlight with a clear blue sky and fluffy white clouds, evoking a sense of renewal and joy'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Spring_1' seed=8889
-# Tuscany
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='impressionist painting on canvas of Tuscany, beautiful landscape with Tuscan farmhouse, in the style of impressionist masters, warm colors, delicate brushstrokes'" style="./assets/oil_full_field.jpg" canvas_w=768 canvas_h=1024 result_path='./workspace/oil_full_field/Tuscany_1' seed=8889
+python vectorpainter.py x=stroke "prompt='A photo of Sydney opera house'" style="./assets/starry.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/starry/sydney_opera_house'
 ```
 
-### Starry
-
+- mountain and cloud
 ```shell
-CUDA_VISIBLE_DEVICES=7 python vectorpainter.py x=stroke prompt='A horse is drinking water by the lake. van Gogh style.' style="./assets/starry.jpg" result_path='./workspace/Starry/horse_starry' seed=100
-CUDA_VISIBLE_DEVICES=6 python vectorpainter.py "prompt='A photo of Sydney opera house.'" x=stroke style="./assets/starry.jpg" result_path='./workspace/Starry/sydney_starry' seed=8019
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke prompt='A painting of a cat.' style="./assets/starry.jpg" result_path='./workspace/Starry/cat_starry' seed=100
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky.'" style="./assets/starry.jpg"  "style_prompt='starry night by van Gogh'" result_path='./workspace/Starry/mountain_starry'
-CUDA_VISIBLE_DEVICES=5 python vectorpainter.py x=stroke "prompt='A dragon-cat hybrid.'" style="./assets/starry.jpg" result_path='./workspace/Starry/dragon_cat_starry'
+python vectorpainter.py x=stroke "prompt='A mountain, with clouds in the sky'" style="./assets/starry.jpg" canvas_w=1024 canvas_h=1024 result_path='./workspace/starry/mountain'
 ```
 
-### Sunflowers
+### Style: Pink Cloud (Le nuage rose by Paul Signac)
 
-```shell 
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A bouquet of roses in a vase.'" style="./assets/sunflowers.jpg" result_path='./workspace/sunflowers/roses_sunflowers' seed=101
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py x=stroke "prompt='A fire-breathing dragon.'" style="./assets/sunflowers.jpg" result_path='./workspace/sunflowers/dragon_sunflowers' seed=100
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py "prompt='A photo of Sydney opera house.'" x=stroke style="./assets/sunflowers.jpg" result_path='./workspace/sunflowers/sydney_sunflowers'
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py x=stroke "prompt='A bouquet of roses in a vase.'" style="./assets/sunflowers.jpg" x.pos_type='bez' x.pos_loss_weight=0.5 result_path='./workspace/sunflowers/roses_sunflowers_bez0.5' seed=100
-```
-
-### Field
-
+- Sakura tree
 ```shell
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py "prompt='A brightly colored mushroom growing on a log. van Gogh style.'" x=stroke style="./assets/oil_field.jpg" result_path='./workspace/Field/mushroom_Field'
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py "prompt='A snail on a leaf. van Gogh style.'" x=stroke style="./assets/oil_field.jpg" result_path='./workspace/Field/snail_Field'
-CUDA_VISIBLE_DEVICES=6 python vectorpainter.py "prompt='A photo of Sydney opera house on the sea.'" x=stroke style="./assets/oil_field.jpg" result_path='./workspace/Field/sydney_Field' seed=102
-CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='A bamboo ladder propped up against an oak tree.'" x=stroke style="./assets/oil_field.jpg" "style_prompt='Van Gogh, Field, oil painting'" result_path='./workspace/Field/bamboo_Field' seed=100
-CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='A rabbit cutting grass with a lawnmower.'" x=stroke style="./assets/oil_field.jpg" "style_prompt='Van Gogh, Field, oil painting'" result_path='./workspace/Field/rabbit_Field' seed=100
+python vectorpainter.py x=stroke "prompt='sakura tree.'" style="./assets/starry.jpg" x.num_paths=20000 canvas_w=1024 canvas_h=1024 result_path='./workspace/pink_cloud/sakura'
+```
+## 📚 Acknowledgement
+
+The project is built based on the following repository:
+
+- [BachiLi/diffvg](https://github.com/BachiLi/diffvg)
+- [huggingface/diffusers](https://github.com/huggingface/diffusers)
+- [ximinng/DiffSketcher](https://github.com/ximinng/DiffSketcher)
+- [ximinng/PyTorch-SVGRender](https://github.com/ximinng/PyTorch-SVGRender)
+
+We gratefully thank the authors for their wonderful works.
+
+## 📎 Citation
+
+If you use this code for your research, please cite the following work:
+
+```
+@article{hu2024vectorpainter,
+  title={VectorPainter: Advanced Stylized Vector Graphics Synthesis Using Stroke-Style Priors},
+  author={Hu, Juncheng and Xing, Ximing and Zhang, Jing and Yu, Qian},
+  journal={arXiv preprint arXiv:2405.02962},
+  year={2024}
+}
 ```
 
-### Impression
+## ©️ Licence
 
-```shell
-CUDA_VISIBLE_DEVICES=5 python vectorpainter.py "prompt='A Torii Gate.'" x=stroke style="./assets/Impression.jpg" result_path='./workspace/impression/torii_impression'
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py "prompt='A beach with a cruise ship passing by.'" x=stroke style="./assets/Impression.jpg" result_path='./workspace/impression/beach_impression' seed=101
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py "prompt='A panda rowing a boat in a pond.'" x=stroke style="./assets/Impression.jpg" result_path='./workspace/impression/panda_impression' seed=106
-CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='An underwater submarine.'" x=stroke style="./assets/Impression.jpg" result_path='./workspace/impression/submarine_impression'
-CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='A boat on the lake.'" x=stroke style="./assets/Impression.jpg" result_path='./workspace/impression/boat_impression'
-```
-
-### Scream
-
-```shell
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py "prompt='fire in the mountain.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/fire_scream'
-CUDA_VISIBLE_DEVICES=2 python vectorpainter.py "prompt='The Great Wall.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/wall_scream'
-CUDA_VISIBLE_DEVICES=1 python vectorpainter.py "prompt='The Great Pyramid.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/pyramid_scream'
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py "prompt='A Torii Gate.'" x=stroke style="./assets/scream.jpg" result_path='./workspace/scream/torii_scream'
-```
-
-### anxiety
-
-```shell
-CUDA_VISIBLE_DEVICES=3 python vectorpainter.py "prompt='fire in the mountain.'" x=stroke style="./assets/anxiety.jpg" result_path='./workspace/anxiety/fire_anxiety'
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py "prompt='The winding Great Wall, with light sky. The anxiety of Edvard Munch style.'" x=stroke style="./assets/anxiety.jpg" result_path='./workspace/anxiety/wall_anxiety' seed=100
-```
-
-### Antimonocromatismo
-
-```shell
-CUDA_VISIBLE_DEVICES=4 python vectorpainter.py "prompt='A panda rowing a boat in a pond.'" x=stroke style="./assets/data_vis/sty/antimonocromatismo.png" result_path='./workspace/antimonocromatismo/panda_antimonocromatismo'
-```
-
-### Majeur
-
-```shell
-CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='The Great Pyramid.'" x=stroke style="./assets/majeur.jpg" result_path='./workspace/majeur/pyramid_majeur'
-CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='A Torii Gate.'" x=stroke style="./assets/majeur.jpg" result_path='./workspace/majeur/torii_majeur'
-CUDA_VISIBLE_DEVICES=7 python vectorpainter.py "prompt='The Great Wall.'" x=stroke style="./assets/majeur.jpg" result_path='./workspace/majeur/wall_majeur'
-CUDA_VISIBLE_DEVICES=0 python vectorpainter.py "prompt='The Eiffel Tower.'" x=stroke style="./assets/majeur.jpg" result_path='./workspace/majeur/eiffel_majeur' seed=100
-```
+This work is licensed under a MIT License.

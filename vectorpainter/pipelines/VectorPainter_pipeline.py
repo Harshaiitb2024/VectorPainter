@@ -19,8 +19,6 @@ from vectorpainter.painter import Painter, SketchPainterOptimizer, inversion, Si
 from vectorpainter.utils.plot import plot_couple, plot_img
 from vectorpainter.utils import mkdirs, create_video
 
-Tensor = torch.Tensor
-
 
 class VectorPainterPipeline(ModelState):
     def __init__(self, args):
@@ -167,7 +165,7 @@ class VectorPainterPipeline(ModelState):
             torch_dtype=torch.float16,
             local_files_only=not self.args.model_download
         )  # doctest: +IGNORE_RESULT
-        inputs = blip2_processor(images=image, return_tensors="pt").to(torch.float16)
+        inputs = blip2_processor(images=image, return_tensors="pt").to(device=self.device, dtype=torch.float16)
         generated_ids = blip2_model.generate(**inputs)
         caption = blip2_processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
         self.print(f"blip style prompt: {caption}")
@@ -313,12 +311,6 @@ class VectorPainterPipeline(ModelState):
                         l_struct = 1. - l_struct_fn(raster_sketch, inputs)
                     else:
                         l_struct = l_struct_fn(raster_sketch, inputs)
-
-                # perceptual loss
-                # l_percep_content = torch.tensor(0.)
-                # if self.x_cfg.perceptual.content_coeff > 0:
-                #     l_perceptual_ = perceptual_loss_fn(inputs, raster_sketch).mean()
-                #     l_percep_content = l_perceptual_ * self.x_cfg.perceptual.content_coeff
 
                 # stroke loss
                 l_rel_pos = torch.tensor(0.)

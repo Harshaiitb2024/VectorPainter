@@ -11,9 +11,7 @@ import omegaconf
 
 from vectorpainter.utils import render_batch_wrap, get_seed_range
 
-METHODS = [
-    'VectorPainter',
-]
+METHODS = ['VectorPainter']
 
 
 @hydra.main(version_base=None, config_path="conf", config_name='config')
@@ -32,33 +30,22 @@ def main(cfg: omegaconf.DictConfig):
     # render function
     render_batch_fn = partial(render_batch_wrap, cfg=cfg, seed_range=seed_range)
     if flag == "VectorPainter":
-        # read each line of prompts.txt file, use as prompt
-        if cfg.prompt is None:
-            with open("prompts.txt", 'r') as f:
-                cfg.prompt = f.readlines()
-                # shuffle
-                # import random
-                # random.shuffle(cfg.prompt)
-        else:
-            cfg.prompt = [cfg.prompt]
-
         from vectorpainter.pipelines import VectorPainterPipeline
-
-        for prompt in cfg.prompt:
-            cfg.prompt = prompt.strip()
-            if not cfg.multirun:  # generate SVG multiple times
-                pipe = VectorPainterPipeline(cfg)
-                pipe.painterly_rendering(text_prompt=cfg.prompt,
-                                         negative_prompt=cfg.neg_prompt,
-                                         style_fpath=cfg.style,
-                                         style_prompt=cfg.style_prompt)
-            else:  # generate many SVG at once
-                render_batch_fn(pipeline=VectorPainterPipeline,
-                                text_prompt=cfg.prompt,
-                                negative_prompt=cfg.neg_prompt,
-                                style_fpath=cfg.style,
-                                style_prompt=cfg.style_prompt)
-
+        cfg.prompt = cfg.prompt.strip()
+        if not cfg.multirun:
+            pipe = VectorPainterPipeline(cfg)
+            pipe.painterly_rendering(text_prompt=cfg.prompt,
+                                        negative_prompt=cfg.neg_prompt,
+                                        style_fpath=cfg.style,
+                                        style_prompt=cfg.style_prompt)
+        else:
+            render_batch_fn(pipeline=VectorPainterPipeline,
+                            text_prompt=cfg.prompt,
+                            negative_prompt=cfg.neg_prompt,
+                            style_fpath=cfg.style,
+                            style_prompt=cfg.style_prompt)
+    else:
+        raise NotImplementedError(f"{flag} is not currently supported!")
 
 if __name__ == '__main__':
     main()
