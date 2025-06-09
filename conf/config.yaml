@@ -19,7 +19,7 @@ state:
   mprec: 'no' # mixed precision, choices: 'no', 'fp16', 'bf16'
 
 # Diffusers config
-model_download: False # Set this variable to True the first time it runs
+model_download: True # Set this variable to True the first time it runs
 force_download: False
 
 # PyDiffVG config
