@@ -13,7 +13,7 @@ import torch
 from scipy.spatial import ConvexHull
 from skimage.segmentation import mark_boundaries, slic
 import numpy as np
-import pydiffvg
+#import pydiffvg
 
 from vectorpainter.diffvg_warp import DiffVGState
 from vectorpainter.utils import view_images
