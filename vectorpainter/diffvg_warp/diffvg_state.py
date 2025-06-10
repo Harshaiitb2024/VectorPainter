@@ -9,7 +9,7 @@ from typing import AnyStr, Union
 import xml.etree.ElementTree as etree
 
 import torch
-import pydiffvg
+#import pydiffvg
 
 
 def init_pydiffvg(device: torch.device,
