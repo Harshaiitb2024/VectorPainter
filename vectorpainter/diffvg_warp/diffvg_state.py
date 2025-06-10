@@ -15,9 +15,9 @@ import torch
 def init_pydiffvg(device: torch.device,
                   use_gpu: bool = torch.cuda.is_available(),
                   print_timing: bool = False):
-    pydiffvg.set_use_gpu(use_gpu)
-    pydiffvg.set_device(device)
-    pydiffvg.set_print_timing(print_timing)
+    #pydiffvg.set_use_gpu(use_gpu)
+    #pydiffvg.set_device(device)
+    #pydiffvg.set_print_timing(print_timing)
 
 
 class DiffVGState(torch.nn.Module):
@@ -97,7 +97,7 @@ class DiffVGState(torch.nn.Module):
         return img
 
     def load_svg(self, path_svg):
-        self.canvas_width, self.canvas_height, self.shapes, self.shape_groups = pydiffvg.svg_to_scene(path_svg)
+        #self.canvas_width, self.canvas_height, self.shapes, self.shape_groups = pydiffvg.svg_to_scene(path_svg)
 
     def save_svg(self,
                  filename: Union[AnyStr, pathlib.Path],
@@ -309,4 +309,4 @@ class DiffVGState(torch.nn.Module):
     def save_image(img, filename, gamma=1):
         if torch.is_tensor(img) and torch.device != 'cpu':
             img = img.detach().cpu()
-        pydiffvg.imwrite(img, filename, gamma=gamma)
+        #pydiffvg.imwrite(img, filename, gamma=gamma)
